@@ -1,12 +1,19 @@
 import os
 from flask import Blueprint, request, jsonify
 import psycopg2
+import socket
 
 contact_bp = Blueprint('contact', __name__)
 
+
 def get_db_connection():
+    """Create and return a database connection using environment variables"""
+
+    # Resolve to IPv4 address
+    host_ipv4 = socket.gethostbyname(os.environ.get('DB_HOST'))
+
     conn = psycopg2.connect(
-        host=os.environ.get('DB_HOST'),
+        hostaddr=host_ipv4,  # Use IPv4 directly
         database=os.environ.get('DB_NAME'),
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASSWORD'),
