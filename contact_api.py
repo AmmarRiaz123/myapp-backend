@@ -1,8 +1,11 @@
 import os
-from flask import Blueprint, request, jsonify
-import psycopg2
 import smtplib
 from email.message import EmailMessage
+from flask import Blueprint, request, jsonify
+import psycopg2
+from psycopg2 import OperationalError, DatabaseError
+from psycopg2.extras import RealDictCursor
+import logging
 
 contact_bp = Blueprint('contact', __name__)
 
@@ -22,12 +25,35 @@ def get_db_connection():
         print(f"Error connecting to database: {e}")
         return None
 
+
+contact_bp = Blueprint('contact', __name__)
+
+logging.basicConfig(level=logging.INFO)  # You can configure to file if needed
+
+def get_db_connection():
+    """Create and return a database connection using environment variables."""
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get('DB_HOST'),
+            database=os.environ.get('DB_NAME'),
+            user=os.environ.get('DB_USER'),
+            password=os.environ.get('DB_PASSWORD'),
+            port=os.environ.get('DB_PORT', 5432),
+            sslmode='require'
+        )
+        return conn
+    except OperationalError as e:
+        logging.error(f"Database connection error: {e}")
+        return None
+
+
 def send_confirmation_email(user_email, user_name):
-    """Send confirmation email to the user using admin Gmail"""
+    """Send confirmation email to the user using admin Gmail."""
     admin_email = os.environ.get('ADMIN_GMAIL')
     admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
+
     if not admin_email or not admin_password:
-        print("Admin Gmail credentials not set in environment variables.")
+        logging.error("Admin Gmail credentials not set in environment variables.")
         return False
 
     msg = EmailMessage()
@@ -45,16 +71,22 @@ def send_confirmation_email(user_email, user_name):
             smtp.login(admin_email, admin_password)
             smtp.send_message(msg)
         return True
+    except smtplib.SMTPAuthenticationError:
+        logging.error("SMTP authentication failed. Check your Gmail credentials.")
+    except smtplib.SMTPConnectError:
+        logging.error("Unable to connect to Gmail SMTP server.")
     except Exception as e:
-        print(f"Error sending confirmation email: {e}")
-        return False
+        logging.error(f"Unexpected error sending confirmation email: {e}")
+    return False
+
 
 def send_admin_notification(user_email, user_name, phone, message):
-    """Send notification email to admin with the user's contact details"""
+    """Send notification email to admin with the user's contact details."""
     admin_email = os.environ.get('ADMIN_GMAIL')
     admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
+
     if not admin_email or not admin_password:
-        print("Admin Gmail credentials not set in environment variables.")
+        logging.error("Admin Gmail credentials not set in environment variables.")
         return False
 
     msg = EmailMessage()
@@ -74,56 +106,65 @@ def send_admin_notification(user_email, user_name, phone, message):
             smtp.login(admin_email, admin_password)
             smtp.send_message(msg)
         return True
+    except smtplib.SMTPAuthenticationError:
+        logging.error("SMTP authentication failed. Check your Gmail credentials.")
+    except smtplib.SMTPConnectError:
+        logging.error("Unable to connect to Gmail SMTP server.")
     except Exception as e:
-        print(f"Error sending admin notification email: {e}")
-        return False
+        logging.error(f"Unexpected error sending admin notification: {e}")
+    return False
+
 
 @contact_bp.route('/contact', methods=['POST'])
 def contact():
-    data = request.get_json(force=True)
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        logging.error(f"Invalid JSON input: {e}")
+        return jsonify({'success': False, 'message': 'Invalid JSON data'}), 400
+
     name = data.get('name')
     email = data.get('email')
     phone = data.get('phone')
     message = data.get('message')
 
     if not all([name, email, phone, message]):
+        logging.warning("Missing required fields in contact form submission.")
         return jsonify({'success': False, 'message': 'All fields are required'}), 400
 
-    conn = None
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
+
     cur = None
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'success': False, 'message': 'Database connection failed'}), 500
-        
         cur = conn.cursor()
-        # Insert into customers table (created_at is auto-set by DB)
         cur.execute(
             "INSERT INTO customers (name, email, phone, message) VALUES (%s, %s, %s, %s)",
             (name, email, phone, message)
         )
         conn.commit()
-
-        # Send confirmation email to user
-        email_sent = send_confirmation_email(email, name)
-        # Send notification email to admin
-        admin_notified = send_admin_notification(email, name, phone, message)
-
-        if not email_sent and not admin_notified:
-            return jsonify({'success': True, 'message': 'Contact form submitted, but failed to send emails'}), 201
-        elif not email_sent:
-            return jsonify({'success': True, 'message': 'Contact form submitted, admin notified, but failed to send confirmation email to user'}), 201
-        elif not admin_notified:
-            return jsonify({'success': True, 'message': 'Contact form submitted, confirmation email sent to user, but failed to notify admin'}), 201
-
-        return jsonify({'success': True, 'message': 'Contact form submitted successfully. Confirmation email sent to user and admin notified.'}), 201
-
+    except DatabaseError as e:
+        logging.error(f"Database error inserting contact: {e}")
+        return jsonify({'success': False, 'message': 'Failed to save contact information'}), 500
     except Exception as e:
-        print(f"Error inserting contact: {e}")
-        return jsonify({'success': False, 'message': 'Failed to submit contact form', 'error': str(e)}), 500
-
+        logging.error(f"Unexpected error inserting contact: {e}")
+        return jsonify({'success': False, 'message': 'An unexpected error occurred while saving your contact'}), 500
     finally:
         if cur:
             cur.close()
         if conn:
             conn.close()
+
+    # Email notifications
+    email_sent = send_confirmation_email(email, name)
+    admin_notified = send_admin_notification(email, name, phone, message)
+
+    if not email_sent and not admin_notified:
+        return jsonify({'success': True, 'message': 'Form saved, but failed to send any emails'}), 201
+    elif not email_sent:
+        return jsonify({'success': True, 'message': 'Form saved, admin notified, but failed to send confirmation email'}), 201
+    elif not admin_notified:
+        return jsonify({'success': True, 'message': 'Form saved, confirmation email sent, but failed to notify admin'}), 201
+
+    return jsonify({'success': True, 'message': 'Form submitted successfully. Confirmation email sent and admin notified.'}), 201
