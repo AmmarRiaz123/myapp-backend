@@ -9,17 +9,25 @@ product_bp = Blueprint('product', __name__)
 def resolve_ipv4(hostname):
     """Resolve hostname to an IPv4 address."""
     try:
+        print(f"[DEBUG] Attempting to resolve IPv4 for hostname: {hostname}")
         addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET)
         ipv4 = addr_info[0][4][0]
+        print(f"[DEBUG] Resolved IPv4 address: {ipv4}")
         return ipv4
     except Exception as e:
-        print(f"Could not resolve IPv4 for {hostname}: {e}")
+        print(f"[ERROR] Could not resolve IPv4 for {hostname}: {e}")
         return hostname  # fallback to hostname if resolution fails
 
 def connection():
     hostname = os.environ.get('DB_HOST')
+    if not hostname:
+        print("[ERROR] Environment variable DB_HOST is not set.")
+        return None
+    
+    print(f"[DEBUG] Using hostname from env: {hostname}")
     ipv4_host = resolve_ipv4(hostname)
 
+    print(f"[DEBUG] Connecting to DB at host: {ipv4_host}")
     try:
         conn = psycopg2.connect(
             host=ipv4_host,
@@ -29,13 +37,17 @@ def connection():
             port=os.environ.get('DB_PORT', 5432),
             sslmode='require'
         )
+        print("[DEBUG] Database connection established successfully.")
         return conn
     except Exception as e:
-        print(f"Error connecting to DB: {e}")
+        print(f"[ERROR] Error connecting to DB: {e}")
         return None
 
 def get_db_connection():
-    return connection()
+    conn = connection()
+    if conn is None:
+        print("[ERROR] get_db_connection: connection() returned None.")
+    return conn
 
 @product_bp.route('/products', methods=['GET'])
 def get_products():
