@@ -202,5 +202,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Ignore config.ini (database configuration)
+#config.ini 
 config.ini
