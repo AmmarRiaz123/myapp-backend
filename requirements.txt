@@ -13,4 +13,3 @@ psycopg2
 requests
 
 # smtplib and email are part of Python standard library, no pip install needed
-# decimal is part of Python standard library, no pip install needed
