@@ -49,6 +49,35 @@ def send_confirmation_email(user_email, user_name):
         print(f"Error sending confirmation email: {e}")
         return False
 
+def send_admin_notification(user_email, user_name, phone, message):
+    """Send notification email to admin with the user's contact details"""
+    admin_email = os.environ.get('ADMIN_GMAIL')
+    admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
+    if not admin_email or not admin_password:
+        print("Admin Gmail credentials not set in environment variables.")
+        return False
+
+    msg = EmailMessage()
+    msg['Subject'] = 'New Contact Form Submission'
+    msg['From'] = admin_email
+    msg['To'] = admin_email
+    msg.set_content(
+        f"New contact form submission:\n\n"
+        f"Name: {user_name}\n"
+        f"Email: {user_email}\n"
+        f"Phone: {phone}\n"
+        f"Message: {message}\n"
+    )
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(admin_email, admin_password)
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Error sending admin notification email: {e}")
+        return False
+
 @contact_bp.route('/contact', methods=['POST'])
 def contact():
     data = request.get_json(force=True)
@@ -75,11 +104,19 @@ def contact():
         )
         conn.commit()
 
+        # Send confirmation email to user
         email_sent = send_confirmation_email(email, name)
-        if not email_sent:
-            return jsonify({'success': True, 'message': 'Contact form submitted, but failed to send confirmation email'}), 201
+        # Send notification email to admin
+        admin_notified = send_admin_notification(email, name, phone, message)
 
-        return jsonify({'success': True, 'message': 'Contact form submitted successfully. Confirmation email sent.'}), 201
+        if not email_sent and not admin_notified:
+            return jsonify({'success': True, 'message': 'Contact form submitted, but failed to send emails'}), 201
+        elif not email_sent:
+            return jsonify({'success': True, 'message': 'Contact form submitted, admin notified, but failed to send confirmation email to user'}), 201
+        elif not admin_notified:
+            return jsonify({'success': True, 'message': 'Contact form submitted, confirmation email sent to user, but failed to notify admin'}), 201
+
+        return jsonify({'success': True, 'message': 'Contact form submitted successfully. Confirmation email sent to user and admin notified.'}), 201
 
     except Exception as e:
         print(f"Error inserting contact: {e}")
