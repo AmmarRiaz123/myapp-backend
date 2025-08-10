@@ -2,6 +2,7 @@ import os
 from flask import Blueprint, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import socket
 
 product_detail_bp = Blueprint('product_detail', __name__)
 
