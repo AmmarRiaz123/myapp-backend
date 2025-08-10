@@ -1,8 +1,10 @@
 import configparser
 from flask import Blueprint, request, jsonify
 import psycopg2
+import socket
 
 contact_bp = Blueprint('contact', __name__)
+
 
 def get_db_connection():
     config = configparser.ConfigParser()
