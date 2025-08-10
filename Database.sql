@@ -81,3 +81,13 @@ CREATE TABLE order_items (
 
 
 
+ALTER TABLE products
+ADD COLUMN rating DECIMAL(2,1) CHECK (rating >= 0 AND rating <= 5),
+ADD COLUMN food_safety BOOLEAN DEFAULT TRUE,
+ADD COLUMN heat_resistant BOOLEAN DEFAULT FALSE,
+ADD COLUMN eco_friendly BOOLEAN DEFAULT TRUE,
+ADD COLUMN reliable BOOLEAN DEFAULT TRUE;
+
+ALTER TABLE products
+DROP COLUMN food_safety,
+DROP COLUMN reliable;

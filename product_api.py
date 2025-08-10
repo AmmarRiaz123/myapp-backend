@@ -64,8 +64,7 @@ def get_products():
             }
             for p in db_products
         ]
-
-        return jsonify(products)
+        return jsonify({'success': True, 'products': products})
 
     except Exception as e:
         print(f"Error fetching products: {e}")
@@ -74,3 +73,4 @@ def get_products():
             'message': 'Failed to fetch products',
             'error': str(e)
         }), 500
+    
