@@ -1,4 +1,4 @@
-import os
+import configparser
 from flask import Blueprint, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -6,13 +6,15 @@ from psycopg2.extras import RealDictCursor
 product_bp = Blueprint('product', __name__)
 
 def get_db_connection():
-    """Create and return a database connection using environment variables"""
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    db_config = config['database']
     conn = psycopg2.connect(
-        host=os.environ.get('DB_HOST'),
-        database=os.environ.get('DB_NAME'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        port=os.environ.get('DB_PORT', 5432),
+        host=db_config.get('host'),
+        database=db_config.get('database'),
+        user=db_config.get('user'),
+        password=db_config.get('password'),
+        port=db_config.get('port', 5432),
         sslmode='require'
     )
     return conn

@@ -1,18 +1,19 @@
-import os
 import psycopg2
+import configparser
 
 def test_db_connection():
     try:
-        print('host:', os.environ.get('DB_HOST'))
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        db_config = config['database']
+        print('host:', db_config.get('host'))
         conn = psycopg2.connect(
-        host=os.environ.get('DB_HOST'),
-        database=os.environ.get('DB_NAME'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
+            host=db_config.get('host'),
+            port=db_config.get('port'),
+            database=db_config.get('database'),
+            user=db_config.get('user'),
+            password=db_config.get('password')
         )
-        print('host:', os.environ.get('DB_HOST'))
         print("Database connection successful!")
         cur = conn.cursor()
         cur.execute("SELECT 1;")
