@@ -6,7 +6,7 @@ from flask_cors import CORS
 from product_api import product_bp
 from product_detail_api import product_detail_bp
 from contact_api import contact_bp
-from requests import my_ip
+from myip_api import my_ip
 
 app = Flask(__name__)
 CORS(app)
