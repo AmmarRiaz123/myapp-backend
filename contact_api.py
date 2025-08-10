@@ -4,17 +4,36 @@ import psycopg2
 
 contact_bp = Blueprint('contact', __name__)
 
-def get_db_connection():
-    conn = psycopg2.connect(
-        host=os.environ.get('DB_HOST'),
-        database=os.environ.get('DB_NAME'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
-    )
-    return conn
+def resolve_ipv4(hostname):
+    """Resolve hostname to an IPv4 address."""
+    try:
+        addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET)
+        ipv4 = addr_info[0][4][0]
+        return ipv4
+    except Exception as e:
+        print(f"Could not resolve IPv4 for {hostname}: {e}")
+        return hostname  # fallback to hostname if resolution fails
 
+def connection():
+    hostname = os.environ.get('DB_HOST')
+    ipv4_host = resolve_ipv4(hostname)
+
+    try:
+        conn = psycopg2.connect(
+            host=ipv4_host,
+            database=os.environ.get('DB_NAME'),
+            user=os.environ.get('DB_USER'),
+            password=os.environ.get('DB_PASSWORD'),
+            port=os.environ.get('DB_PORT', 5432),
+            sslmode='require'
+        )
+        return conn
+    except Exception as e:
+        print(f"Error connecting to DB: {e}")
+        return None
+
+def get_db_connection():
+    return connection()
 @contact_bp.route('/contact', methods=['POST'])
 def contact():
     data = request.get_json()
