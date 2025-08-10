@@ -57,15 +57,16 @@ def get_products():
         products = [
             {
                 'id': p['id'],
-                'image': p.get('primary_image', ''),
-                'title': p.get('name', ''),
+                'product_code': p.get('product_code', ''),
+                'name': p.get('name', ''),
+                'type': p.get('type', ''),
                 'description': p.get('description', ''),
-                'price': p.get('type', '')  # Replace with actual price if available
+                'primary_image': p.get('primary_image', '')
             }
             for p in db_products
         ]
 
-        return jsonify(products)
+        return jsonify({'success': True, 'products': products})
 
     except Exception as e:
         print(f"Error fetching products: {e}")
