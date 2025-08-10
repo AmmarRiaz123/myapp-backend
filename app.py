@@ -6,6 +6,7 @@ from flask_cors import CORS
 from product_api import product_bp
 from product_detail_api import product_detail_bp
 from contact_api import contact_bp
+from requests import my_ip
 
 app = Flask(__name__)
 CORS(app)
@@ -14,6 +15,7 @@ CORS(app)
 app.register_blueprint(product_bp)
 app.register_blueprint(product_detail_bp)
 app.register_blueprint(contact_bp)
+app.add_url_rule('/myip', view_func=my_ip)
 
 if __name__ == '__main__':
     app.run(
