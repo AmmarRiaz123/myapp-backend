@@ -94,6 +94,7 @@ def get_product_by_code(product_code):
         conn.close()
         if not product_id_record:
             return jsonify({'success': False, 'message': f'Product with code {product_code} not found'}), 404
+        # Call the existing function with the ID
         return get_product_detail(product_id_record['id'])
     except Exception as e:
         print(f"Error fetching product by code: {e}")
@@ -102,7 +103,6 @@ def get_product_by_code(product_code):
             'message': 'Failed to fetch product details',
             'error': str(e)
         }), 500
-    
         if not product_id_record:
             return jsonify({'success': False, 'message': f'Product with code {product_code} not found'}), 404
         # Call the existing function with the ID

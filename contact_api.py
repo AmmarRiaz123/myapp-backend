@@ -9,25 +9,6 @@ import logging
 
 contact_bp = Blueprint('contact', __name__)
 
-def get_db_connection():
-    """Create and return a database connection using environment variables"""
-    try:
-        conn = psycopg2.connect(
-            host=os.environ.get('DB_HOST'),
-            database=os.environ.get('DB_NAME'),
-            user=os.environ.get('DB_USER'),
-            password=os.environ.get('DB_PASSWORD'),
-            port=os.environ.get('DB_PORT', 5432),
-            sslmode='require'
-        )
-        return conn
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
-        return None
-
-
-contact_bp = Blueprint('contact', __name__)
-
 logging.basicConfig(level=logging.INFO)  # You can configure to file if needed
 
 def get_db_connection():
