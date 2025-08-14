@@ -4,7 +4,43 @@
 
 This backend uses JWT authentication via AWS Cognito.  
 **All protected API endpoints require a valid access token.**  
+Some endpoints require admin privileges.  
 The frontend must handle login, token storage, and send the token with every API call.
+
+---
+
+## Route Access Levels
+
+### Public Routes (No Authentication Required)
+- `POST /signup`
+- `POST /verify`
+- `POST /login`
+- `POST /forgot-password`
+- `POST /confirm-forgot-password`
+
+### Protected Routes (Require Auth: Any Logged-In User)
+- `GET /products`
+- `GET /product/<id>`
+- `GET /product/code/<product_code>`
+- `POST /contact`
+- `GET /myip`
+- `POST /cart/add`
+- `GET /cart`
+- `POST /checkout`
+- `GET /orders`
+- `POST /refresh`
+- `POST /logout`
+
+### Admin Routes (Require Auth: User Must Be Admin)
+- `GET /admin/dashboard`
+- `PUT /admin/inventory/<product_id>`
+- `GET /admin/orders`
+- `PUT /admin/orders/<order_id>`
+- `GET /admin/products`
+- `POST /admin/products`
+- `GET /admin/users`
+- `POST /admin/products` (create product)
+- (Any other route under `/admin/...`)
 
 ---
 
@@ -166,7 +202,8 @@ The frontend must handle login, token storage, and send the token with every API
 
 ## Protected Endpoints
 
-All other endpoints (e.g., `/products`, `/product/<id>`, `/contact`, `/myip`) **require** the `Authorization: Bearer <access_token>` header.
+All endpoints listed under "Protected Routes" require the `Authorization: Bearer <access_token>` header.  
+All endpoints listed under "Admin Routes" require the `Authorization: Bearer <access_token>` header and the user must belong to the `admin` group in Cognito.
 
 ---
 
@@ -186,7 +223,10 @@ All other endpoints (e.g., `/products`, `/product/<id>`, `/contact`, `/myip`) **
 
 ## Summary
 
-- Always send the `access_token` in the `Authorization` header for protected endpoints.
+- **Public routes:** No token required.
+- **Protected routes:** Require valid access token.
+- **Admin routes:** Require valid access token and admin privileges.
+- Always send the `access_token` in the `Authorization` header for protected/admin endpoints.
 - Store tokens securely on the frontend.
 - Use the refresh flow if the token expires.
 - Only signup, verify, login, and password reset endpoints are public.
