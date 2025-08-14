@@ -79,15 +79,45 @@ CREATE TABLE order_items (
     price NUMERIC(10,2) NOT NULL                      -- price per unit at time of order
 );
 
+-- SHOPPING CART
+CREATE TABLE cart (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,  -- Cognito user ID
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cart_items (
+    id SERIAL PRIMARY KEY,
+    cart_id INT REFERENCES cart(id) ON DELETE CASCADE,
+    product_id INT REFERENCES products(id),
+    quantity INT NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for faster cart lookups
+CREATE INDEX idx_cart_user_id ON cart(user_id);
 
 
 ALTER TABLE products
 ADD COLUMN rating DECIMAL(2,1) CHECK (rating >= 0 AND rating <= 5),
-ADD COLUMN food_safety BOOLEAN DEFAULT TRUE,
 ADD COLUMN heat_resistant BOOLEAN DEFAULT FALSE,
-ADD COLUMN eco_friendly BOOLEAN DEFAULT TRUE,
-ADD COLUMN reliable BOOLEAN DEFAULT TRUE;
+ADD COLUMN eco_friendly BOOLEAN DEFAULT TRUE;
 
 ALTER TABLE products
-DROP COLUMN food_safety,
-DROP COLUMN reliable;
+ALTER COLUMN heat_resistant SET DEFAULT TRUE;
+
+-- View for admin dashboard
+CREATE VIEW admin_dashboard AS
+SELECT 
+    COUNT(DISTINCT o.id) as total_orders,
+    COUNT(DISTINCT o.customer_id) as unique_customers,
+    SUM(oi.quantity) as total_items_sold,
+    SUM(oi.quantity * oi.price) as total_revenue,
+    (SELECT COUNT(*) FROM products) as total_products,
+    (SELECT COUNT(*) FROM inventory WHERE quantity < 10) as low_stock_items
+FROM orders o
+LEFT JOIN order_items oi ON o.id = oi.order_id
+WHERE o.created_at >= NOW() - INTERVAL '30 days';
+
+
+

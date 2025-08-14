@@ -36,36 +36,35 @@ def get_products():
             p.name, 
             p.type, 
             p.description,
+            i.quantity as stock,
             (
                 SELECT image_url 
                 FROM product_images 
                 WHERE product_id = p.id AND is_primary = TRUE 
-                ORDER BY id ASC LIMIT 1
+                LIMIT 1
             ) as primary_image
         FROM 
             products p
+        LEFT JOIN 
+            inventory i ON p.id = i.product_id
         ORDER BY 
             p.name
         """
         cursor.execute(query)
-        db_products = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
-
-        # Transform DB products to match frontend expectations
-        products = [
-            {
+        products = cursor.fetchall()
+        
+        return jsonify({
+            'success': True,
+            'products': [{
                 'id': p['id'],
+                'code': p['product_code'],
+                'name': p['name'],
+                'description': p['description'],
                 'image': p.get('primary_image', ''),
-                'title': p.get('name', ''),
-                'description': p.get('description', ''),
-                'price': p.get('type', '')  # Replace with actual price if available
-            }
-            for p in db_products
-        ]
-
-        return jsonify(products)
+                'stock': p.get('stock', 0),
+                'type': p['type']
+            } for p in products]
+        })
 
     except Exception as e:
         print(f"Error fetching products: {e}")
@@ -74,3 +73,4 @@ def get_products():
             'message': 'Failed to fetch products',
             'error': str(e)
         }), 500
+
