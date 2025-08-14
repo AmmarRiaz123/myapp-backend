@@ -3,7 +3,6 @@ from flask import Blueprint, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import socket
-from auth.token_validator import require_auth
 
 product_detail_bp = Blueprint('product_detail', __name__)
 
@@ -20,7 +19,6 @@ def get_db_connection():
     return conn
 
 @product_detail_bp.route('/product/<int:product_id>', methods=['GET'])
-@require_auth
 def get_product_detail(product_id):
     """
     Fetch detailed information about a specific product,
@@ -83,7 +81,6 @@ def get_product_detail(product_id):
         }), 500
 
 @product_detail_bp.route('/product/code/<product_code>', methods=['GET'])
-@require_auth
 def get_product_by_code(product_code):
     """
     Fetch detailed information about a specific product by its code.

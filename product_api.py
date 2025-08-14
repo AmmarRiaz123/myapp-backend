@@ -3,7 +3,6 @@ from flask import Blueprint, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import socket
-from auth.token_validator import require_auth
 
 product_bp = Blueprint('product', __name__)
 
@@ -21,7 +20,6 @@ def get_db_connection():
 
 
 @product_bp.route('/products', methods=['GET'])
-@require_auth
 def get_products():
     """
     Fetch all products with their primary images.
