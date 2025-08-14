@@ -36,6 +36,7 @@ def get_products():
             p.name, 
             p.type, 
             p.description,
+            p.price,
             i.quantity as stock,
             (
                 SELECT image_url 
@@ -53,16 +54,20 @@ def get_products():
         cursor.execute(query)
         products = cursor.fetchall()
         
-        # Return products as a list of JSON objects
-        return jsonify([{
-            'id': p['id'],
-            'code': p['product_code'],
-            'name': p['name'],
-            'description': p['description'],
-            'image': p.get('primary_image', ''),
-            'stock': p.get('stock', 0),
-            'type': p['type']
-        } for p in products])
+        # Return products as a list of JSON objects with keys matching Products.js
+        return jsonify([
+            {
+                'id': p['id'],
+                'title': p['name'],
+                'price': p.get('price', ''),
+                'description': p['description'],
+                'image': p.get('primary_image', ''),
+                'code': p['product_code'],
+                'stock': p.get('stock', 0),
+                'type': p['type']
+            }
+            for p in products
+        ])
 
     except Exception as e:
         print(f"Error fetching products: {e}")
