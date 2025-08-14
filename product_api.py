@@ -53,18 +53,16 @@ def get_products():
         cursor.execute(query)
         products = cursor.fetchall()
         
-        return jsonify({
-            'success': True,
-            'products': [{
-                'id': p['id'],
-                'code': p['product_code'],
-                'name': p['name'],
-                'description': p['description'],
-                'image': p.get('primary_image', ''),
-                'stock': p.get('stock', 0),
-                'type': p['type']
-            } for p in products]
-        })
+        # Return products as a list of JSON objects
+        return jsonify([{
+            'id': p['id'],
+            'code': p['product_code'],
+            'name': p['name'],
+            'description': p['description'],
+            'image': p.get('primary_image', ''),
+            'stock': p.get('stock', 0),
+            'type': p['type']
+        } for p in products])
 
     except Exception as e:
         print(f"Error fetching products: {e}")
