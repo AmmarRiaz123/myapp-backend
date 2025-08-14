@@ -6,6 +6,7 @@ import psycopg2
 from psycopg2 import OperationalError, DatabaseError
 from psycopg2.extras import RealDictCursor
 import logging
+from auth.token_validator import require_auth
 
 contact_bp = Blueprint('contact', __name__)
 
@@ -97,6 +98,7 @@ def send_admin_notification(user_email, user_name, phone, message):
 
 
 @contact_bp.route('/contact', methods=['POST'])
+@require_auth
 def contact():
     try:
         data = request.get_json(force=True)
