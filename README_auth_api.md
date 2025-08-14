@@ -1,11 +1,63 @@
 # Auth API Endpoints & Authentication Guide
 
+## How to Get Tokens
+
+After a successful login **(POST `/login` to your backend API)**, the backend returns a JSON response containing:
+- `access_token` (used for all protected and admin API calls)
+- `refresh_token` (used to get a new access token when the current one expires)
+- `id_token` (optional, contains user info)
+
+**You do NOT get this JSON from the Cognito callback route (`/callback`).**  
+The `/callback` route is used for OAuth flows (like social login or hosted UI), not for direct API login.
+
+**For direct API login (username/email/phone + password):**
+- Send a POST request to `/login` on your backend.
+- The backend will handle Cognito authentication and return the tokens in the JSON response.
+
+**Example login request:**
+```http
+POST /login
+Content-Type: application/json
+
+{
+  "username": "your_username", // or "email" or "phone_number"
+  "password": "your_password"
+}
+```
+
+**The response JSON is received from the `/login` route on your backend:**
+```json
+{
+  "success": true,
+  "tokens": {
+    "access_token": "eyJraWQiOiJr...",
+    "refresh_token": "eyJjdHkiOiJ...",
+    "id_token": "eyJhbGciOiJSUzI1..."
+  }
+}
+```
+
+If you use Cognito's hosted UI or OAuth, the tokens are returned to your frontend at the callback URL (e.g., `/callback`), and you must extract them from the URL fragment or query parameters.
+
+For most backend API login flows, use the `/login` route as described above.
+
+**How to use the token:**
+- Store the `access_token` securely on the frontend (e.g., in memory, localStorage, or cookies).
+- For every protected or admin API call, include the token in the HTTP header:
+  ```
+  Authorization: Bearer <access_token>
+  ```
+
+**How to refresh the token:**
+- When the `access_token` expires, use the `refresh_token` with the `/refresh` endpoint to get a new access token.
+
+---
+
 ## Overview
 
 This backend uses JWT authentication via AWS Cognito.  
-**All protected API endpoints require a valid access token.**  
-Some endpoints require admin privileges.  
-The frontend must handle login, token storage, and send the token with every API call.
+**Some API endpoints are public, some require authentication, and some require admin privileges.**  
+The frontend must handle login, token storage, and send the token with every API call to protected/admin endpoints.
 
 ---
 
@@ -17,13 +69,13 @@ The frontend must handle login, token storage, and send the token with every API
 - `POST /login`
 - `POST /forgot-password`
 - `POST /confirm-forgot-password`
-
-### Protected Routes (Require Auth: Any Logged-In User)
 - `GET /products`
 - `GET /product/<id>`
 - `GET /product/code/<product_code>`
 - `POST /contact`
 - `GET /myip`
+
+### Protected Routes (Require Auth: Any Logged-In User)
 - `POST /cart/add`
 - `GET /cart`
 - `POST /checkout`
@@ -221,6 +273,26 @@ All endpoints listed under "Admin Routes" require the `Authorization: Bearer <ac
 
 ---
 
+# Cognito App Client Callback URL
+
+If you are using Cognito's **Hosted UI** or OAuth flows (social login, etc.), set your app client callback URL to the frontend route that will handle the authentication response and extract tokens.
+
+**Example:**  
+If your frontend is running at `http://localhost:3000`, set the callback URL in Cognito App Client settings to:
+```
+http://localhost:3000/callback
+```
+or any route in your frontend that is designed to handle the login response.
+
+- For direct API login (username/email/phone + password via `/login`), **the callback URL is not used**.
+- For Hosted UI/OAuth, the callback URL is where Cognito will redirect the user after login, with tokens in the URL.
+
+**Summary:**  
+- **Hosted UI/OAuth:** Set callback URL to your frontend handler (e.g., `/callback`).
+- **Direct API login:** No callback URL needed; tokens are returned by your backend `/login` route.
+
+---
+
 ## Summary
 
 - **Public routes:** No token required.
@@ -229,6 +301,6 @@ All endpoints listed under "Admin Routes" require the `Authorization: Bearer <ac
 - Always send the `access_token` in the `Authorization` header for protected/admin endpoints.
 - Store tokens securely on the frontend.
 - Use the refresh flow if the token expires.
-- Only signup, verify, login, and password reset endpoints are public.
+- Only signup, verify, login, password reset, and product listing/details endpoints are public.
 
 **All requests and responses use JSON format.**
