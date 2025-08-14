@@ -1,5 +1,7 @@
 import requests
+from auth.token_validator import require_auth
 
+@require_auth
 def my_ip():
     try:
         ipv4 = requests.get("https://api.ipify.org").text

@@ -83,3 +83,5 @@ def require_admin(f):
         except Exception:
             return jsonify({'success': False, 'message': 'Invalid token'}), 401
     return decorated
+
+# (No changes needed, just ensure this file is imported and require_auth is used in all routes)

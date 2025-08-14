@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from .cognito_config import CognitoClient
+from .token_validator import require_auth
 
 auth_bp = Blueprint('auth', __name__)
 cognito = CognitoClient()
@@ -69,6 +70,7 @@ def login():
         return error_response(str(e), 500)
 
 @auth_bp.route('/refresh', methods=['POST'])
+@require_auth
 def refresh_token():
     try:
         data = request.get_json()
@@ -90,6 +92,7 @@ def refresh_token():
         return error_response(str(e), 500)
 
 @auth_bp.route('/logout', methods=['POST'])
+@require_auth
 def logout():
     try:
         data = request.get_json()
