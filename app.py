@@ -16,6 +16,11 @@ from routes.admin.dashboard import admin_dashboard_bp
 from routes.admin.inventory_management import admin_inventory_bp
 from routes.admin.order_management import admin_orders_bp
 from routes.admin.product_management import admin_products_bp
+from dotenv import load_dotenv
+
+
+load_dotenv()  # will read .env into os.environ
+
 
 
 app = Flask(__name__)
