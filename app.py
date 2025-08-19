@@ -28,10 +28,12 @@ CORS(
     app,
     resources={r"/*": {"origins": [
         "http://localhost:3000",
-        "https://web-production-b093f.up.railway.app"
+        "https://web-production-b093f.up.railway.app",   # backend (optional for self calls)
+        "https://abundant-achievement-production-88e5.up.railway.app"  # ✅ your frontend
     ]}},
     supports_credentials=True
 )
+
 
 # Register blueprints
 app.register_blueprint(product_bp)
