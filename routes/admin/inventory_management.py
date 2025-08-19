@@ -2,6 +2,9 @@ from flask import Blueprint, request, jsonify
 from auth.token_validator import require_admin
 import os
 import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv() 
 
 admin_inventory_bp = Blueprint('admin_inventory', __name__)
 
@@ -12,7 +15,7 @@ def get_db_connection():
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASSWORD'),
         port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
+        sslmode=os.getenv('DB_SSLMODE', 'require')
     )
     cur = conn.cursor()
     return conn, cur
