@@ -3,6 +3,11 @@ from flask import Blueprint, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import socket
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
+
 
 product_bp = Blueprint('product', __name__)
 
@@ -14,7 +19,7 @@ def get_db_connection():
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASSWORD'),
         port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
+        sslmode=os.getenv('DB_SSLMODE', 'require')
     )
     return conn
 

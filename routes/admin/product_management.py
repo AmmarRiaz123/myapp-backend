@@ -4,6 +4,10 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from dotenv import load_dotenv
+
+load_dotenv() 
+
 admin_products_bp = Blueprint('admin_products', __name__)
 
 def get_db_connection(cursor_factory=None):
@@ -13,7 +17,7 @@ def get_db_connection(cursor_factory=None):
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASSWORD'),
         port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
+        sslmode=os.getenv('DB_SSLMODE', 'require')
     )
     cur = conn.cursor(cursor_factory=cursor_factory)
     return conn, cur

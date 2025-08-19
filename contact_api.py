@@ -6,6 +6,9 @@ import psycopg2
 from psycopg2 import OperationalError, DatabaseError
 from psycopg2.extras import RealDictCursor
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 contact_bp = Blueprint('contact', __name__)
 
@@ -20,7 +23,7 @@ def get_db_connection():
             user=os.environ.get('DB_USER'),
             password=os.environ.get('DB_PASSWORD'),
             port=os.environ.get('DB_PORT', 5432),
-            sslmode='require'
+            sslmode=os.getenv('DB_SSLMODE', 'require')  # allow override locally
         )
         return conn
     except OperationalError as e:

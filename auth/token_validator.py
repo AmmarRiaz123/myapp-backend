@@ -5,6 +5,10 @@ import os
 import requests
 from jwt.algorithms import RSAAlgorithm
 
+from dotenv import load_dotenv
+
+load_dotenv() 
+
 # Cache keys to avoid hitting AWS for every request
 _COGNITO_KEYS_CACHE = None
 
