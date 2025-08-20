@@ -19,7 +19,19 @@ from routes.admin.product_management import admin_products_bp
 
 
 app = Flask(__name__)
-CORS(app)
+
+# ✅ Allow only your frontend origins (dev + prod)
+CORS(
+    app,
+    resources={r"/*": {"origins": [
+        "http://localhost:3000",
+        "https://web-production-b093f.up.railway.app",   # backend (optional for self calls)
+        "https://abundant-achievement-production-88e5.up.railway.app",
+        "https://pekypk.com"  # ✅ your frontend
+    ]}},
+    supports_credentials=True
+)
+
 
 # Register blueprints
 app.register_blueprint(product_bp)
