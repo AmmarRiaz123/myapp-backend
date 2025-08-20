@@ -3,16 +3,14 @@ import psycopg2
 
 def test_db_connection():
     try:
-        print('host:', os.environ.get('DB_HOST'))
         conn = psycopg2.connect(
-        host=os.environ.get('DB_HOST'),
-        database=os.environ.get('DB_NAME'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        port=os.environ.get('DB_PORT', 5432),
-        sslmode='require'
+            host=os.getenv('DB_HOST'),
+            database=os.getenv('DB_NAME'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
+            port=os.getenv('DB_PORT', 5432),
+            sslmode=os.getenv('DB_SSLMODE', 'require')  # <- new
         )
-        print('host:', os.environ.get('DB_HOST'))
         print("Database connection successful!")
         cur = conn.cursor()
         cur.execute("SELECT 1;")
@@ -23,4 +21,6 @@ def test_db_connection():
         print(f"Database connection failed: {e}")
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
     test_db_connection()

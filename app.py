@@ -1,6 +1,7 @@
 import os
 from flask import Flask
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 # Import blueprints
 from product_api import product_bp
@@ -17,6 +18,8 @@ from routes.admin.inventory_management import admin_inventory_bp
 from routes.admin.order_management import admin_orders_bp
 from routes.admin.product_management import admin_products_bp
 
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -45,6 +48,7 @@ app.register_blueprint(admin_inventory_bp)
 app.register_blueprint(admin_orders_bp)
 app.register_blueprint(admin_products_bp)
 
+# Extra route
 app.add_url_rule('/myip', view_func=my_ip)
 
 if __name__ == '__main__':
