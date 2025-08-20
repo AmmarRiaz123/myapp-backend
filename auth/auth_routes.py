@@ -12,6 +12,27 @@ def error_response(message, status=400):
     return jsonify({'success': False, 'message': message}), status
 
 
+def get_user_friendly_error(error_msg):
+    if "InvalidParameterException" in error_msg and "Invalid phone number format" in error_msg:
+        return 'Phone number format is invalid. Please use international format, e.g. +1234567890'
+    if "UsernameExistsException" in error_msg:
+        return 'An account with this username/email already exists.'
+    if "CodeMismatchException" in error_msg:
+        return 'Invalid verification code. Please check and try again.'
+    if "ExpiredCodeException" in error_msg:
+        return 'Verification code has expired. Please request a new one.'
+    if "NotAuthorizedException" in error_msg and "Incorrect username or password" in error_msg:
+        return 'Incorrect username or password.'
+    if "UserNotFoundException" in error_msg:
+        return 'No account found with the provided information.'
+    if "LimitExceededException" in error_msg:
+        return 'Attempt limit exceeded, please try again later.'
+    if "InvalidPasswordException" in error_msg:
+        return 'Password does not meet requirements.'
+    # Add more mappings as needed
+    return error_msg
+
+
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
     try:
@@ -43,15 +64,7 @@ def signup():
                 'message': 'Please check your email for verification code'
             }), 201
 
-        error_msg = result['error']
-        # User-friendly error for phone number format
-        if (
-            "InvalidParameterException" in error_msg
-            and "Invalid phone number format" in error_msg
-        ):
-            return error_response(
-                'Phone number format is invalid. Please use international format, e.g. +1234567890'
-            )
+        error_msg = get_user_friendly_error(result['error'])
         return error_response(error_msg)
 
     except Exception as e:
@@ -71,7 +84,8 @@ def verify():
         result = cognito.confirm_sign_up(email, code)
         if result['success']:
             return jsonify({'success': True, 'message': 'Email verified successfully'})
-        return error_response(result['error'])
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg)
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -100,7 +114,8 @@ def login():
                     'id_token': auth_result.get('IdToken')
                 }
             })
-        return error_response(result['error'], 401)
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg, 401)
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -126,7 +141,8 @@ def refresh_token():
                     'id_token': auth_result.get('IdToken')
                 }
             })
-        return error_response(result['error'], 401)
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg, 401)
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -145,7 +161,8 @@ def logout():
         result = cognito.global_sign_out(access_token)
         if result['success']:
             return jsonify({'success': True, 'message': 'Logged out successfully'})
-        return error_response(result['error'], 401)
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg, 401)
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -163,7 +180,8 @@ def forgot_password():
         result = cognito.forgot_password(email)
         if result['success']:
             return jsonify({'success': True, 'message': 'Password reset code sent to email'})
-        return error_response(result['error'])
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg)
 
     except Exception as e:
         return error_response(str(e), 500)
@@ -183,10 +201,12 @@ def confirm_forgot_password():
         result = cognito.confirm_forgot_password(email, code, new_password)
         if result['success']:
             return jsonify({'success': True, 'message': 'Password has been reset'})
-        return error_response(result['error'])
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg)
 
     except Exception as e:
         return error_response(str(e), 500)
+
 
 @auth_bp.route('/resend', methods=['POST'])
 def resend_confirmation():
@@ -204,7 +224,8 @@ def resend_confirmation():
                 'message': 'Confirmation code resent successfully',
                 'delivery': result['data'].get('CodeDeliveryDetails', {})
             })
-        return error_response(result['error'])
+        error_msg = get_user_friendly_error(result['error'])
+        return error_response(error_msg)
 
     except Exception as e:
         return error_response(str(e), 500)
