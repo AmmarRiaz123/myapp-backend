@@ -43,11 +43,14 @@ def signup():
                 'message': 'Please check your email for verification code'
             }), 201
 
-        # User-friendly error for phone number format
         error_msg = result['error']
-        if 'phone_number' in error_msg and ('format' in error_msg or 'must start with' in error_msg or '+'):
+        # User-friendly error for phone number format
+        if (
+            "InvalidParameterException" in error_msg
+            and "Invalid phone number format" in error_msg
+        ):
             return error_response(
-                'Phone number must be in international format, e.g. +1234567890'
+                'Phone number format is invalid. Please use international format, e.g. +1234567890'
             )
         return error_response(error_msg)
 
