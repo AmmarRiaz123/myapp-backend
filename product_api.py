@@ -39,6 +39,7 @@ def get_products():
             p.id, 
             p.product_code, 
             p.name, 
+            p.official_name,
             p.type, 
             p.description,
             p.price,
@@ -64,6 +65,7 @@ def get_products():
             {
                 'id': p['id'],
                 'title': p['name'],
+                'official_name': p.get('official_name', ''),
                 'price': p.get('price', ''),
                 'description': p['description'],
                 'image': p.get('primary_image', ''),
