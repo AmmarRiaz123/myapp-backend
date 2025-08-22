@@ -11,6 +11,7 @@ from myip_api import my_ip
 from auth.auth_routes import auth_bp
 from cart_routes import cart_bp
 from order_routes import order_bp
+from payfastpk.payfast_api import payfast_bp
 
 # Admin blueprints
 from routes.admin.dashboard import admin_dashboard_bp
@@ -43,6 +44,7 @@ app.register_blueprint(contact_bp)
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(cart_bp)
 app.register_blueprint(order_bp)
+app.register_blueprint(payfast_bp)
 app.register_blueprint(admin_dashboard_bp)
 app.register_blueprint(admin_inventory_bp)
 app.register_blueprint(admin_orders_bp)
