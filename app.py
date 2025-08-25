@@ -24,20 +24,20 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ✅ Allow only your frontend origins (dev + prod)
+# 🌸 Simplified + corrected CORS config
 CORS(
     app,
     resources={r"/*": {"origins": [
         "http://localhost:3000",
-        "https://web-production-b093f.up.railway.app",   # backend (optional for self calls)
+        "https://web-production-b093f.up.railway.app",   # backend if self-calling
         "https://abundant-achievement-production-88e5.up.railway.app",
-        "https://pekypk.com"  # ✅ your frontend
+        "https://pekypk.com"  # your production frontend
     ]}},
     supports_credentials=True,
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    expose_headers=["Content-Type", "Authorization"],  # 🔑 lets browser read headers
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 )
-
 
 # Register blueprints
 app.register_blueprint(product_bp)

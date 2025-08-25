@@ -119,10 +119,14 @@ def login():
 
     except Exception as e:
         return error_response(str(e), 500)
+    
+@auth_bp.route('/refresh', methods=['OPTIONS'])
+def refresh_options():
+    # Let Flask-CORS attach headers
+    return ('', 204)
 
 
 @auth_bp.route('/refresh', methods=['POST'])
-@require_auth
 def refresh_token():
     try:
         data = request.get_json()
