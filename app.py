@@ -33,7 +33,9 @@ CORS(
         "https://abundant-achievement-production-88e5.up.railway.app",
         "https://pekypk.com"  # ✅ your frontend
     ]}},
-    supports_credentials=True
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 )
 
 
