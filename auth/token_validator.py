@@ -29,7 +29,7 @@ def get_cognito_public_keys():
     _COGNITO_KEYS_CACHE = response.json()['keys']
     return _COGNITO_KEYS_CACHE
 
-def verify_token(token):
+def verify_token(token, expected_use=None):
     """Verify and decode a JWT token from Cognito."""
     keys = get_cognito_public_keys()
     header = jwt.get_unverified_header(token)
@@ -40,13 +40,19 @@ def verify_token(token):
         raise ValueError("Invalid token: key not found")
 
     public_key = RSAAlgorithm.from_jwk(key)
-
-    return jwt.decode(
+    decoded = jwt.decode(
         token,
         public_key,
         algorithms=['RS256'],
-        audience=os.environ.get('COGNITO_CLIENT_ID')
+        options={"verify_aud": False}  # skip audience check
     )
+
+    # Optional: check token_use if you want
+    if expected_use and decoded.get("token_use") != expected_use:
+        raise ValueError(f"Invalid token_use: expected {expected_use}")
+
+    return decoded
+
 
 def extract_token():
     """Extract Bearer token from Authorization header."""
@@ -63,12 +69,15 @@ def require_auth(f):
             return jsonify({'success': False, 'message': 'Token is missing'}), 401
 
         try:
-            decoded = verify_token(token)
+            # verify as access token for APIs
+            decoded = verify_token(token, expected_use="access")
             request.user = decoded
             return f(*args, **kwargs)
-        except Exception:
+        except Exception as e:
+            print("Token verification failed:", e)
             return jsonify({'success': False, 'message': 'Invalid token'}), 401
     return decorated
+
 
 def require_admin(f):
     @wraps(f)

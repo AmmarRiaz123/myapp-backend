@@ -21,8 +21,8 @@ class CognitoClient:
         try:
             response = self.client.sign_up(
                 ClientId=self.client_id,
-                SecretHash=get_secret_hash(username),  # ✅ must match Username
-                Username=username,  # ✅ must NOT be email
+                SecretHash=get_secret_hash(username),
+                Username=username,
                 Password=password,
                 UserAttributes=[
                     {'Name': 'email', 'Value': email},
@@ -39,7 +39,7 @@ class CognitoClient:
         try:
             response = self.client.confirm_sign_up(
                 ClientId=self.client_id,
-                SecretHash=get_secret_hash(username),  # ✅ required
+                SecretHash=get_secret_hash(username),
                 Username=username,
                 ConfirmationCode=code
             )
@@ -55,32 +55,34 @@ class CognitoClient:
                 AuthParameters={
                     'USERNAME': username,
                     'PASSWORD': password,
-                    'SECRET_HASH': get_secret_hash(username)  # ✅ required
+                    'SECRET_HASH': get_secret_hash(username)
                 }
             )
             return {'success': True, 'data': response}
         except ClientError as e:
             return {'success': False, 'error': str(e)}
 
+    # ✅ properly indented inside the class
     def refresh_token(self, refresh_token, username):
         try:
             response = self.client.initiate_auth(
-                ClientId=self.client_id,
                 AuthFlow='REFRESH_TOKEN_AUTH',
                 AuthParameters={
                     'REFRESH_TOKEN': refresh_token,
-                    'SECRET_HASH': get_secret_hash(username)  # ✅ required
-                }
+                    'SECRET_HASH': get_secret_hash(username),
+                    'USERNAME': username
+                },
+                ClientId=self.client_id
             )
             return {'success': True, 'data': response}
-        except ClientError as e:
+        except Exception as e:
             return {'success': False, 'error': str(e)}
 
     def forgot_password(self, email):
         try:
             response = self.client.forgot_password(
                 ClientId=self.client_id,
-                SecretHash=get_secret_hash(email),  # ✅ required
+                SecretHash=get_secret_hash(email),
                 Username=email
             )
             return {'success': True, 'data': response}
@@ -91,7 +93,7 @@ class CognitoClient:
         try:
             response = self.client.confirm_forgot_password(
                 ClientId=self.client_id,
-                SecretHash=get_secret_hash(email),  # ✅ required
+                SecretHash=get_secret_hash(email),
                 Username=email,
                 ConfirmationCode=code,
                 Password=new_password
@@ -104,10 +106,9 @@ class CognitoClient:
         try:
             response = self.client.resend_confirmation_code(
                 ClientId=self.client_id,
-                SecretHash=get_secret_hash(username),  # ✅ required
+                SecretHash=get_secret_hash(username),
                 Username=username
             )
             return {'success': True, 'data': response}
         except ClientError as e:
             return {'success': False, 'error': str(e)}
-

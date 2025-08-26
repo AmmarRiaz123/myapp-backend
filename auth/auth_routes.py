@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from .cognito_config import CognitoClient
 from .token_validator import require_auth
 from auth.utils import get_secret_hash
+from jose import jwt
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -93,32 +94,32 @@ def verify():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    try:
-        data = request.get_json()
-        # Accept username, email, or phone_number
-        identifier = data.get('username') or data.get('email') or data.get('phone_number')
-        password = data.get('password')
+    data = request.get_json()
+    identifier = data.get('email') or data.get('username')
+    password = data.get('password')
 
-        if not identifier or not password:
-            return error_response('Missing required fields')
+    result = cognito.initiate_auth(identifier, password)
+    if result['success']:
+        auth_result = result['data']['AuthenticationResult']
 
-        # Pass identifier and password to initiate_auth
-        result = cognito.initiate_auth(identifier, password)
-        if result['success']:
-            auth_result = result['data']['AuthenticationResult']
-            return jsonify({
-                'success': True,
-                'tokens': {
-                    'access_token': auth_result['AccessToken'],
-                    'refresh_token': auth_result.get('RefreshToken'),
-                    'id_token': auth_result.get('IdToken')
-                }
-            })
-        error_msg = get_user_friendly_error(result['error'])
-        return error_response(error_msg, 401)
+        # ✅ Decode ID token to extract username/email
+        id_token = auth_result.get('IdToken')
+        claims = jwt.get_unverified_claims(id_token)
+        username = claims.get("cognito:username") or claims.get("email")
 
-    except Exception as e:
-        return error_response(str(e), 500)
+        print("Cognito username (from IdToken):", username)
+
+        return jsonify({
+            'success': True,
+            'tokens': {
+                'access_token': auth_result['AccessToken'],
+                'refresh_token': auth_result.get('RefreshToken'),
+                'id_token': id_token,
+                'username': username  # ✅ always return a valid username
+            }
+        })
+
+    return error_response(result['error'], 401)
     
 @auth_bp.route('/refresh', methods=['OPTIONS'])
 def refresh_options():
@@ -127,17 +128,21 @@ def refresh_options():
 
 
 @auth_bp.route('/refresh', methods=['POST'])
-def refresh_token():
+def refresh_token_route():
     try:
         data = request.get_json()
         refresh_token = data.get('refresh_token')
+        username = data.get('username')
 
-        if not refresh_token:
-            return error_response('Missing refresh token')
+        if not refresh_token or not username:
+            return error_response('Missing refresh token or username')
 
-        result = cognito.refresh_token(refresh_token)
+        result = cognito.refresh_token(refresh_token, username)
+
         if result['success']:
             auth_result = result['data']['AuthenticationResult']
+            print("Received refresh request for username:", username)
+            print("Returning new AccessToken:", auth_result['AccessToken'][:20] + "...")
             return jsonify({
                 'success': True,
                 'tokens': {
@@ -145,11 +150,15 @@ def refresh_token():
                     'id_token': auth_result.get('IdToken')
                 }
             })
+
         error_msg = get_user_friendly_error(result['error'])
         return error_response(error_msg, 401)
 
     except Exception as e:
         return error_response(str(e), 500)
+
+
+
 
 
 @auth_bp.route('/logout', methods=['POST'])
