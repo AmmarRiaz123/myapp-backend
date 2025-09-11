@@ -86,6 +86,8 @@ CREATE TABLE cart (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
+
 CREATE TABLE cart_items (
     id SERIAL PRIMARY KEY,
     cart_id INT REFERENCES cart(id) ON DELETE CASCADE,
