@@ -5,6 +5,13 @@ import logging
 from urllib.parse import urlencode
 import hashlib
 import uuid
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import Json
+from dotenv import load_dotenv
+import json
+
+load_dotenv()
 
 payfast_bp = Blueprint('payfast', __name__)
 
@@ -41,7 +48,7 @@ def load_payfast_config():
         url = sandbox_url
     else:
         url = os.getenv('PAYFAST_URL', live_url)
-
+        
     merchant_id = os.getenv('PAYFAST_MERCHANT_ID') 
     merchant_key = os.getenv('PAYFAST_MERCHANT_KEY') 
     passphrase = os.getenv('PAYFAST_PASSPHRASE', '')
@@ -84,6 +91,112 @@ def user_friendly_error(message, details=None):
     """Return a user-friendly error response and log details."""
     logging.error(f"PayFast error: {message}" + (f" Details: {details}" if details else ""))
     return jsonify({'success': False, 'message': message}), 400
+
+def update_order_payment_status(m_payment_id, success=True):
+    """
+    Update orders.payment_status = TRUE for the given order id.
+    m_payment_id is expected to be the orders.id (integer). If not integer, skip update.
+    """
+    if not m_payment_id:
+        logging.info("No m_payment_id provided; skipping DB update.")
+        return False
+
+    # try converting to int (orders.id is integer). If not possible, skip.
+    try:
+        order_id = int(m_payment_id)
+    except (ValueError, TypeError):
+        logging.warning(f"m_payment_id is not an integer (m_payment_id={m_payment_id}); cannot update orders table.")
+        return False
+
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get('DB_HOST'),
+            database=os.environ.get('DB_NAME'),
+            user=os.environ.get('DB_USER'),
+            password=os.environ.get('DB_PASSWORD'),
+            port=os.environ.get('DB_PORT', 5432),
+            sslmode=os.getenv('DB_SSLMODE', 'require')
+        )
+        cur = conn.cursor()
+        # Only mark as paid when success is True
+        cur.execute(
+            "UPDATE orders SET payment_status = %s WHERE id = %s RETURNING id",
+            (success, order_id)
+        )
+        updated = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if updated:
+            logging.info(f"Order {order_id} payment_status updated to {success}.")
+            return True
+        else:
+            logging.warning(f"No order found with id={order_id}; payment_status not updated.")
+            return False
+    except Exception as e:
+        logging.error(f"Failed to update order payment_status for id={order_id}: {e}")
+        return False
+
+# --- New DB helpers (added) ---
+def db_connect():
+    """Return (conn, cur) connected to Postgres using environment variables."""
+    conn = psycopg2.connect(
+        host=os.environ.get('DB_HOST'),
+        database=os.environ.get('DB_NAME'),
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASSWORD'),
+        port=os.environ.get('DB_PORT', 5432),
+        sslmode=os.getenv('DB_SSLMODE', 'require')
+    )
+    cur = conn.cursor()
+    return conn, cur
+
+def find_order_by_m_payment_id(m_payment_id):
+    """
+    Try to resolve m_payment_id to an order id.
+    - If m_payment_id is integer, try orders.id
+    - Otherwise try orders.m_payment_id = provided value
+    Returns order_id or None.
+    """
+    if not m_payment_id:
+        return None
+    try:
+        # try as integer id first
+        order_id = int(m_payment_id)
+        conn, cur = db_connect()
+        cur.execute("SELECT id FROM orders WHERE id = %s", (order_id,))
+        rec = cur.fetchone()
+        cur.close()
+        conn.close()
+        if rec:
+            return rec[0]
+    except (ValueError, TypeError):
+        order_id = None
+    except Exception:
+        # fallthrough to try m_payment_id lookup
+        try:
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+
+    try:
+        conn, cur = db_connect()
+        cur.execute("SELECT id FROM orders WHERE m_payment_id = %s", (m_payment_id,))
+        rec = cur.fetchone()
+        cur.close()
+        conn.close()
+        if rec:
+            return rec[0]
+    except Exception:
+        try:
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+
+    return None
 
 @payfast_bp.route('/payfast/initiate', methods=['POST'])
 def initiate_payment():
@@ -132,6 +245,28 @@ def initiate_payment():
         if email:
             payfast_data['email_address'] = email
 
+        # Attempt to link this m_payment_id to an order (if caller passed an order id)
+        try:
+            resolved_order = find_order_by_m_payment_id(m_payment_id)
+            if resolved_order:
+                # set m_payment_id and provider on the order for traceability
+                conn, cur = db_connect()
+                cur.execute("""
+                    UPDATE orders
+                    SET m_payment_id = %s, payment_provider = %s, payment_updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id
+                """, (m_payment_id, 'payfast', resolved_order))
+                if cur.fetchone():
+                    conn.commit()
+                    logging.info(f"Linked m_payment_id to order {resolved_order}")
+                else:
+                    conn.rollback()
+                cur.close()
+                conn.close()
+        except Exception as e:
+            logging.warning(f"Failed to link m_payment_id to order: {e}")
+
         signature = generate_signature(payfast_data, cfg['passphrase'])
         if not signature:
             return user_friendly_error("Failed to generate payment signature. Please try again.")
@@ -164,13 +299,80 @@ def payfast_callback():
             logging.warning(f"Signature mismatch on callback: received!=expected")
             return user_friendly_error("Payment verification failed. Invalid signature received.")
 
-        # TODO: Update order status in your database here
-        # Example:
-        # order_id = post_data.get('m_payment_id')
-        # payment_status = post_data.get('payment_status')
-        # logging.info(f"Update order {order_id} status to {payment_status}")
-        # ...update order in DB...
+        # Signature validated — persist notification and update order status as needed
+        m_payment_id = post_data.get('m_payment_id')
+        pf_status = (post_data.get('payment_status') or '').upper()
+        payment_success = pf_status in ('COMPLETE', 'PAID', 'SUCCESS') or pf_status == ''
+
+        # Try to resolve to our order id
+        order_id = find_order_by_m_payment_id(m_payment_id)
+
+        # Persist notification
+        try:
+            conn, cur = db_connect()
+            cur.execute("""
+                INSERT INTO payment_notifications (order_id, provider, notification_payload, payment_status)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+            """, (order_id, 'payfast', Json(post_data), post_data.get('payment_status')))
+            # Safely get returned id without relying on cursor.rowcount (may not exist on test doubles)
+            try:
+                notif_row = cur.fetchone()
+                notif_id = notif_row[0] if notif_row else None
+            except Exception:
+                notif_id = None
+
+            # Update orders table: set payment_payload, provider, m_payment_id and payment_updated_at
+            if order_id:
+                cur.execute("""
+                    UPDATE orders
+                    SET payment_payload = %s,
+                        payment_provider = %s,
+                        payment_updated_at = NOW(),
+                        m_payment_id = %s
+                    WHERE id = %s
+                    RETURNING id
+                """, (Json(post_data), 'payfast', m_payment_id, order_id))
+
+                # mark as paid when appropriate
+                if payment_success:
+                    cur.execute("UPDATE orders SET payment_status = TRUE WHERE id = %s", (order_id,))
+
+            conn.commit()
+            # close resources in normal flow
+            try:
+                cur.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+            logging.info(f"Payment notification persisted (notif_id={notif_id}) for order_id={order_id}")
+        except Exception as e:
+            # attempt to cleanup partially opened resources
+            try:
+                cur.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+            logging.error(f"Failed to persist payment notification or update order: {e}")
+
+        # TODO: Additional order processing (notify user, bookkeeping, etc.)
 
         return jsonify({'success': True, 'message': 'Callback received and signature validated'}), 200
     except Exception as e:
         return user_friendly_error("Failed to process payment callback. Please contact support.", str(e))
+
+__all__ = [
+    'payfast_bp',
+    'format_amount',
+    'load_payfast_config',
+    'generate_signature',
+    'db_connect',
+    'find_order_by_m_payment_id'
+]

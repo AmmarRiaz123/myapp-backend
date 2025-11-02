@@ -67,7 +67,8 @@ CREATE TABLE orders (
     customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
     status VARCHAR(50) DEFAULT 'pending',             -- pending, shipped, delivered, etc.
     total_price NUMERIC(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    payment_status BOOLEAN DEFAULT FALSE NOT NULL
 );
 
 -- ORDER ITEMS (individual items in each order)
@@ -108,15 +109,37 @@ ADD COLUMN eco_friendly BOOLEAN DEFAULT TRUE;
 ALTER TABLE products
 ALTER COLUMN heat_resistant SET DEFAULT TRUE;
 
+-- Add columns to store external payment identifiers and payloads (idempotent)
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS m_payment_id VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS payment_provider VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS payment_payload JSONB,
+    ADD COLUMN IF NOT EXISTS payment_updated_at TIMESTAMP;
+
+-- Index to quickly find orders by external payment id (e.g., m_payment_id)
+CREATE INDEX IF NOT EXISTS idx_orders_m_payment_id ON orders(m_payment_id);
+
+-- Table to record incoming payment provider notifications (ITN / callbacks)
+CREATE TABLE IF NOT EXISTS payment_notifications (
+    id SERIAL PRIMARY KEY,
+    order_id INT REFERENCES orders(id) ON DELETE SET NULL,
+    provider VARCHAR(100) NOT NULL,
+    notification_payload JSONB,
+    payment_status VARCHAR(50),
+    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- View for admin dashboard
+DROP VIEW IF EXISTS admin_dashboard;
 CREATE VIEW admin_dashboard AS
 SELECT 
     COUNT(DISTINCT o.id) as total_orders,
     COUNT(DISTINCT o.customer_id) as unique_customers,
-    SUM(oi.quantity) as total_items_sold,
-    SUM(oi.quantity * oi.price) as total_revenue,
+    COALESCE(SUM(oi.quantity), 0) as total_items_sold,
+    COALESCE(SUM(oi.quantity * oi.price), 0) as total_revenue,
     (SELECT COUNT(*) FROM products) as total_products,
-    (SELECT COUNT(*) FROM inventory WHERE quantity < 10) as low_stock_items
+    (SELECT COUNT(*) FROM inventory WHERE quantity < 10) as low_stock_items,
+    COUNT(DISTINCT o.id) FILTER (WHERE o.payment_status = TRUE) as paid_orders
 FROM orders o
 LEFT JOIN order_items oi ON o.id = oi.order_id
 WHERE o.created_at >= NOW() - INTERVAL '30 days';
