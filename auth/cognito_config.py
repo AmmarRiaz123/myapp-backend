@@ -65,6 +65,9 @@ class CognitoClient:
     # ✅ properly indented inside the class
     def refresh_token(self, refresh_token, username):
         try:
+            if not refresh_token or not username:
+                return {'success': False, 'error': 'Missing refresh token or username'}
+
             response = self.client.initiate_auth(
                 AuthFlow='REFRESH_TOKEN_AUTH',
                 AuthParameters={
@@ -74,9 +77,17 @@ class CognitoClient:
                 },
                 ClientId=self.client_id
             )
-            return {'success': True, 'data': response}
+            auth_result = response.get('AuthenticationResult')
+            if not auth_result:
+                return {'success': False, 'error': 'No AuthenticationResult in response'}
+
+            return {'success': True, 'data': auth_result}
+
         except Exception as e:
+            # Always return a structured dict, never raise
             return {'success': False, 'error': str(e)}
+
+
 
     def forgot_password(self, email):
         try:

@@ -3,6 +3,7 @@ from .cognito_config import CognitoClient
 from .token_validator import require_auth
 from auth.utils import get_secret_hash
 from jose import jwt
+from flask_cors import cross_origin
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -121,42 +122,35 @@ def login():
 
     return error_response(result['error'], 401)
     
+# OPTIONS handler for CORS preflight
 @auth_bp.route('/refresh', methods=['OPTIONS'])
+@cross_origin()
 def refresh_options():
-    # Let Flask-CORS attach headers
-    return ('', 204)
+    return '', 204
 
 
 @auth_bp.route('/refresh', methods=['POST'])
+@cross_origin()
 def refresh_token_route():
     try:
         data = request.get_json()
         refresh_token = data.get('refresh_token')
         username = data.get('username')
 
-        if not refresh_token or not username:
-            return error_response('Missing refresh token or username')
-
         result = cognito.refresh_token(refresh_token, username)
 
-        if result['success']:
-            auth_result = result['data']['AuthenticationResult']
-            print("Received refresh request for username:", username)
-            print("Returning new AccessToken:", auth_result['AccessToken'][:20] + "...")
+        if result.get('success'):
+            auth_result = result['data']
             return jsonify({
                 'success': True,
-                'tokens': {
-                    'access_token': auth_result['AccessToken'],
-                    'id_token': auth_result.get('IdToken')
-                }
+                'access_token': auth_result['AccessToken'],
+                'id_token': auth_result.get('IdToken')
             })
 
-        error_msg = get_user_friendly_error(result['error'])
-        return error_response(error_msg, 401)
+        return jsonify({'success': False, 'error': result.get('error')}), 401
 
     except Exception as e:
-        return error_response(str(e), 500)
-
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 
