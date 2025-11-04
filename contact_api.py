@@ -1,19 +1,16 @@
 import os
-import smtplib
-from email.message import EmailMessage
 from flask import Blueprint, request, jsonify
 import psycopg2
 from psycopg2 import OperationalError, DatabaseError
 import logging
 from dotenv import load_dotenv
-import socket
+import requests
 from time import sleep
 
 load_dotenv()
 
 contact_bp = Blueprint('contact', __name__)
-
-logging.basicConfig(level=logging.INFO)  # You can configure to file if needed
+logging.basicConfig(level=logging.INFO)
 
 def get_db_connection():
     """Create and return a database connection using environment variables."""
@@ -31,135 +28,83 @@ def get_db_connection():
         logging.error(f"Database connection error: {e}")
         return None
 
-
 def validate_email_config():
-    """Validate email configuration on startup."""
-    required = ['ADMIN_GMAIL', 'ADMIN_GMAIL_PASSWORD']
-    missing = [var for var in required if not os.getenv(var)]
-    if missing:
-        logging.error(f"Missing required email configuration: {', '.join(missing)}")
+    """Validate Resend API configuration."""
+    if not os.getenv('RESEND_API_KEY'):
+        logging.error("Missing RESEND_API_KEY environment variable")
         return False
     return True
 
+def send_email_with_retry(to_email, subject, html_content, max_retries=3):
+    """Send email using Resend API with retry mechanism."""
+    api_key = os.getenv('RESEND_API_KEY')
+    if not api_key:
+        return False
 
-def send_email_with_retry(msg, max_retries=3, delay_seconds=1):
-    """Send email with retry mechanism."""
-    admin_email = os.environ.get('ADMIN_GMAIL')
-    admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
-    smtp_port = int(os.environ.get('SMTP_PORT', '587'))  # default to 587 for STARTTLS
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
     
-    logging.info(f"Attempting to send email via SMTP port {smtp_port}")
+    data = {
+        'from': 'Peky PK <noreply@pekypk.com>',
+        'to': [to_email],
+        'subject': subject,
+        'html': html_content
+    }
 
     for attempt in range(max_retries):
         try:
-            socket.setdefaulttimeout(30)
-            
-            # Use standard SMTP with STARTTLS instead of SMTP_SSL
-            with smtplib.SMTP('smtp.gmail.com', smtp_port) as smtp:
-                logging.debug("SMTP connection established")
-                smtp.ehlo()
-                
-                # Use STARTTLS for encryption
-                smtp.starttls()
-                smtp.ehlo()
-                
-                logging.debug("Attempting SMTP login")
-                smtp.login(admin_email, admin_password)
-                logging.debug("SMTP login successful")
-                
-                smtp.send_message(msg)
-                logging.info("Email sent successfully")
-                return True
-                
-        except socket.gaierror as e:
-            logging.error(f"DNS lookup failed (attempt {attempt + 1}/{max_retries}): {e}")
+            response = requests.post(
+                'https://api.resend.com/emails',
+                headers=headers,
+                json=data
+            )
+            response.raise_for_status()
+            logging.info(f"Email sent successfully to {to_email}")
+            return True
+        except requests.RequestException as e:
+            logging.error(f"Failed to send email (attempt {attempt + 1}/{max_retries}): {str(e)}")
             if attempt < max_retries - 1:
-                sleep(delay_seconds * (attempt + 1))
-        except socket.timeout as e:
-            logging.error(f"Socket timeout (attempt {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                sleep(delay_seconds * (attempt + 1))
-        except smtplib.SMTPAuthenticationError as e:
-            logging.error(f"SMTP Authentication failed: {e}")
-            break  # No retry for auth failures
-        except smtplib.SMTPException as e:
-            logging.error(f"SMTP error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
-            if attempt < max_retries - 1:
-                sleep(delay_seconds * (attempt + 1))
-        except Exception as e:
-            logging.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
-            if attempt < max_retries - 1:
-                sleep(delay_seconds * (attempt + 1))
-    
+                sleep(1)  # Simple delay between retries
     return False
 
-
 def send_confirmation_email(user_email, user_name):
-    """Send confirmation email to the user using admin Gmail."""
+    """Send confirmation email using Resend."""
     if not validate_email_config():
         return False
 
-    msg = EmailMessage()
-    msg['Subject'] = 'Contact Form Submission Confirmation'
-    msg['From'] = os.environ.get('ADMIN_GMAIL')
-    msg['To'] = user_email
-    msg.set_content(
-        f"Dear {user_name},\n\n"
-        "Thank you for contacting us. Your message has been received and our officer will get in touch with you soon.\n\n"
-        "Best regards,\nAdmin Team"
+    html_content = f"""
+    <p>Dear {user_name},</p>
+    <p>Thank you for contacting us. Your message has been received and our officer will get in touch with you soon.</p>
+    <p>Best regards,<br>Admin Team</p>
+    """
+
+    return send_email_with_retry(
+        user_email,
+        'Contact Form Submission Confirmation',
+        html_content
     )
-
-    return send_email_with_retry(msg)
-
 
 def send_admin_notification(user_email, user_name, phone, message):
-    """Send notification email to admin with the user's contact details."""
+    """Send admin notification using Resend."""
     if not validate_email_config():
         return False
 
-    admin_email = os.environ.get('ADMIN_GMAIL')
-    msg = EmailMessage()
-    msg['Subject'] = 'New Contact Form Submission'
-    msg['From'] = admin_email
-    msg['To'] = admin_email
-    msg.set_content(
-        f"New contact form submission:\n\n"
-        f"Name: {user_name}\n"
-        f"Email: {user_email}\n"
-        f"Phone: {phone}\n"
-        f"Message: {message}\n"
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@pekypk.com')
+    html_content = f"""
+    <h3>New Contact Form Submission</h3>
+    <p><strong>Name:</strong> {user_name}</p>
+    <p><strong>Email:</strong> {user_email}</p>
+    <p><strong>Phone:</strong> {phone}</p>
+    <p><strong>Message:</strong><br>{message}</p>
+    """
+
+    return send_email_with_retry(
+        admin_email,
+        'New Contact Form Submission',
+        html_content
     )
-
-    return send_email_with_retry(msg)
-
-
-# Add a test endpoint for email configuration
-@contact_bp.route('/contact/test-email', methods=['GET'])
-def test_email():
-    """Test email configuration."""
-    if not validate_email_config():
-        return jsonify({
-            'success': False,
-            'message': 'Email configuration incomplete. Check ADMIN_GMAIL and ADMIN_GMAIL_PASSWORD.'
-        }), 500
-
-    admin_email = os.environ.get('ADMIN_GMAIL')
-    msg = EmailMessage()
-    msg['Subject'] = 'Test Email'
-    msg['From'] = admin_email
-    msg['To'] = admin_email
-    msg.set_content('This is a test email to verify SMTP configuration.')
-
-    if send_email_with_retry(msg):
-        return jsonify({
-            'success': True,
-            'message': 'Test email sent successfully'
-        })
-    return jsonify({
-        'success': False,
-        'message': 'Failed to send test email. Check logs for details.'
-    }), 500
-
 
 @contact_bp.route('/contact', methods=['POST', 'OPTIONS'])
 def contact():
