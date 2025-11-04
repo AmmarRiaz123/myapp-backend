@@ -99,8 +99,10 @@ def send_admin_notification(user_email, user_name, phone, message):
     return False
 
 
-@contact_bp.route('/contact', methods=['POST'])
+@contact_bp.route('/contact', methods=['POST', 'OPTIONS'])
 def contact():
+    if request.method == 'OPTIONS':
+        return '', 200
     try:
         data = request.get_json(force=True)
     except Exception as e:
