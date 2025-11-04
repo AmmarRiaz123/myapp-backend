@@ -31,9 +31,10 @@ CORS(
         "http://localhost:3000",
         "https://web-production-b093f.up.railway.app",   # backend if self-calling
         "https://abundant-achievement-production-88e5.up.railway.app",
-        "https://pekypk.com"  # your production frontend
+        "https://pekypk.com",  # your production frontend
+        "https://www.pekypk.com"
     ]}},
-    supports_credentials=True,
+    supports_credentials=False,
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     expose_headers=["Content-Type", "Authorization"],  # 🔑 lets browser read headers
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]

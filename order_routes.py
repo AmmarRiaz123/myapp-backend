@@ -104,5 +104,27 @@ def get_orders():
     finally:
         cur.close()
         conn.close()
+        
+@order_bp.route('/orders', methods=['POST'])
+@require_auth
+def create_order():
+    data = request.get_json()
+    user_id = request.user['sub']
+    amount = data.get('amount')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO orders (customer_id, status, total_amount)
+            VALUES (%s, %s, %s) RETURNING id
+        """, (user_id, 'pending', amount))
+        order_id = cur.fetchone()[0]
+        conn.commit()
+        return jsonify({'success': True, 'order_id': order_id})
+    finally:
+        cur.close()
+        conn.close()
+
 
 # All routes already protected with @require_auth

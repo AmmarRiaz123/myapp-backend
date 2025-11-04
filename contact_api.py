@@ -145,8 +145,10 @@ def test_email():
     }), 500
 
 
-@contact_bp.route('/contact', methods=['POST'])
+@contact_bp.route('/contact', methods=['POST', 'OPTIONS'])
 def contact():
+    if request.method == 'OPTIONS':
+        return '', 200
     try:
         data = request.get_json(force=True)
     except Exception as e:
