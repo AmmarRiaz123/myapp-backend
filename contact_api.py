@@ -46,35 +46,51 @@ def send_email_with_retry(msg, max_retries=3, delay_seconds=1):
     """Send email with retry mechanism."""
     admin_email = os.environ.get('ADMIN_GMAIL')
     admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
-    proxy_host = os.environ.get('SMTP_PROXY_HOST')
-    proxy_port = os.environ.get('SMTP_PROXY_PORT')
+    smtp_port = int(os.environ.get('SMTP_PORT', '587'))  # default to 587 for STARTTLS
+    
+    logging.info(f"Attempting to send email via SMTP port {smtp_port}")
 
     for attempt in range(max_retries):
         try:
-            # Configure socket timeout
-            socket.setdefaulttimeout(30)  # 30 seconds timeout
+            socket.setdefaulttimeout(30)
             
-            smtp_kwargs = {}
-            if proxy_host and proxy_port:
-                smtp_kwargs['source_address'] = (proxy_host, int(proxy_port))
-
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465, **smtp_kwargs) as smtp:
+            # Use standard SMTP with STARTTLS instead of SMTP_SSL
+            with smtplib.SMTP('smtp.gmail.com', smtp_port) as smtp:
+                logging.debug("SMTP connection established")
+                smtp.ehlo()
+                
+                # Use STARTTLS for encryption
+                smtp.starttls()
+                smtp.ehlo()
+                
+                logging.debug("Attempting SMTP login")
                 smtp.login(admin_email, admin_password)
+                logging.debug("SMTP login successful")
+                
                 smtp.send_message(msg)
-            return True
+                logging.info("Email sent successfully")
+                return True
+                
+        except socket.gaierror as e:
+            logging.error(f"DNS lookup failed (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+        except socket.timeout as e:
+            logging.error(f"Socket timeout (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
         except smtplib.SMTPAuthenticationError as e:
             logging.error(f"SMTP Authentication failed: {e}")
             break  # No retry for auth failures
-        except (socket.timeout, smtplib.SMTPConnectError) as e:
-            logging.error(f"SMTP Connection error (attempt {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                sleep(delay_seconds * (attempt + 1))  # Exponential backoff
-            continue
-        except Exception as e:
-            logging.error(f"Unexpected email error (attempt {attempt + 1}/{max_retries}): {e}")
+        except smtplib.SMTPException as e:
+            logging.error(f"SMTP error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
             if attempt < max_retries - 1:
                 sleep(delay_seconds * (attempt + 1))
-            continue
+        except Exception as e:
+            logging.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+    
     return False
 
 
