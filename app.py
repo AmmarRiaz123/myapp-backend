@@ -34,7 +34,7 @@ CORS(
         "https://pekypk.com",  # your production frontend
         "https://www.pekypk.com"
     ]}},
-    supports_credentials=True,
+    supports_credentials=False,
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     expose_headers=["Content-Type", "Authorization"],  # 🔑 lets browser read headers
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
