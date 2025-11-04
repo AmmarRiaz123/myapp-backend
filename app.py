@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -37,22 +37,27 @@ CORS(
                 "https://www.pekypk.com"
             ],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
             "expose_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": False,
-            "max_age": 600  # Cache preflight requests for 10 minutes
+            "supports_credentials": True,
+            "max_age": 600,
+            "vary_header": True,
+            "send_wildcard": False
         }
     }
 )
 
-# Add CORS headers for error responses
+# Add global OPTIONS handler and CORS headers
 @app.after_request
 def after_request(response):
-    if response.status_code == 405:  # Method Not Allowed
-        allow_methods = response.headers.get('Allow', '').split(', ')
-        if 'OPTIONS' not in allow_methods:
-            allow_methods.append('OPTIONS')
-        response.headers['Allow'] = ', '.join(allow_methods)
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
+    
+    # Handle OPTIONS method for all routes
+    if request.method == 'OPTIONS':
+        response.status_code = 200
+        return response
+        
     return response
 
 # Register blueprints

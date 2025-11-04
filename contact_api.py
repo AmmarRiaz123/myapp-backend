@@ -163,8 +163,14 @@ def test_email():
 
 @contact_bp.route('/contact', methods=['POST', 'OPTIONS'])
 def contact():
+    # Handle preflight requests
     if request.method == 'OPTIONS':
-        return '', 200
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.status_code = 200
+        return response
+
     try:
         data = request.get_json(force=True)
     except Exception as e:
