@@ -24,21 +24,36 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# 🌸 Simplified + corrected CORS config
+# Updated CORS configuration with proper preflight handling
 CORS(
     app,
-    resources={r"/*": {"origins": [
-        "http://localhost:3000",
-        "https://web-production-b093f.up.railway.app",   # backend if self-calling
-        "https://abundant-achievement-production-88e5.up.railway.app",
-        "https://pekypk.com",  # your production frontend
-        "https://www.pekypk.com"
-    ]}},
-    supports_credentials=False,
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-    expose_headers=["Content-Type", "Authorization"],  # 🔑 lets browser read headers
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    resources={
+        r"/*": {
+            "origins": [
+                "http://localhost:3000",
+                "https://web-production-b093f.up.railway.app",
+                "https://abundant-achievement-production-88e5.up.railway.app",
+                "https://pekypk.com",
+                "https://www.pekypk.com"
+            ],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+            "expose_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": False,
+            "max_age": 600  # Cache preflight requests for 10 minutes
+        }
+    }
 )
+
+# Add CORS headers for error responses
+@app.after_request
+def after_request(response):
+    if response.status_code == 405:  # Method Not Allowed
+        allow_methods = response.headers.get('Allow', '').split(', ')
+        if 'OPTIONS' not in allow_methods:
+            allow_methods.append('OPTIONS')
+        response.headers['Allow'] = ', '.join(allow_methods)
+    return response
 
 # Register blueprints
 app.register_blueprint(product_bp)
