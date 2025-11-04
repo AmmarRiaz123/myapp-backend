@@ -4,9 +4,10 @@ from email.message import EmailMessage
 from flask import Blueprint, request, jsonify
 import psycopg2
 from psycopg2 import OperationalError, DatabaseError
-from psycopg2.extras import RealDictCursor
 import logging
 from dotenv import load_dotenv
+import socket
+from time import sleep
 
 load_dotenv()
 
@@ -31,18 +32,76 @@ def get_db_connection():
         return None
 
 
-def send_confirmation_email(user_email, user_name):
-    """Send confirmation email to the user using admin Gmail."""
+def validate_email_config():
+    """Validate email configuration on startup."""
+    required = ['ADMIN_GMAIL', 'ADMIN_GMAIL_PASSWORD']
+    missing = [var for var in required if not os.getenv(var)]
+    if missing:
+        logging.error(f"Missing required email configuration: {', '.join(missing)}")
+        return False
+    return True
+
+
+def send_email_with_retry(msg, max_retries=3, delay_seconds=1):
+    """Send email with retry mechanism."""
     admin_email = os.environ.get('ADMIN_GMAIL')
     admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
+    smtp_port = int(os.environ.get('SMTP_PORT', '587'))  # default to 587 for STARTTLS
+    
+    logging.info(f"Attempting to send email via SMTP port {smtp_port}")
 
-    if not admin_email or not admin_password:
-        logging.error("Admin Gmail credentials not set in environment variables.")
+    for attempt in range(max_retries):
+        try:
+            socket.setdefaulttimeout(30)
+            
+            # Use standard SMTP with STARTTLS instead of SMTP_SSL
+            with smtplib.SMTP('smtp.gmail.com', smtp_port) as smtp:
+                logging.debug("SMTP connection established")
+                smtp.ehlo()
+                
+                # Use STARTTLS for encryption
+                smtp.starttls()
+                smtp.ehlo()
+                
+                logging.debug("Attempting SMTP login")
+                smtp.login(admin_email, admin_password)
+                logging.debug("SMTP login successful")
+                
+                smtp.send_message(msg)
+                logging.info("Email sent successfully")
+                return True
+                
+        except socket.gaierror as e:
+            logging.error(f"DNS lookup failed (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+        except socket.timeout as e:
+            logging.error(f"Socket timeout (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+        except smtplib.SMTPAuthenticationError as e:
+            logging.error(f"SMTP Authentication failed: {e}")
+            break  # No retry for auth failures
+        except smtplib.SMTPException as e:
+            logging.error(f"SMTP error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+        except Exception as e:
+            logging.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
+            if attempt < max_retries - 1:
+                sleep(delay_seconds * (attempt + 1))
+    
+    return False
+
+
+def send_confirmation_email(user_email, user_name):
+    """Send confirmation email to the user using admin Gmail."""
+    if not validate_email_config():
         return False
 
     msg = EmailMessage()
     msg['Subject'] = 'Contact Form Submission Confirmation'
-    msg['From'] = admin_email
+    msg['From'] = os.environ.get('ADMIN_GMAIL')
     msg['To'] = user_email
     msg.set_content(
         f"Dear {user_name},\n\n"
@@ -50,29 +109,15 @@ def send_confirmation_email(user_email, user_name):
         "Best regards,\nAdmin Team"
     )
 
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(admin_email, admin_password)
-            smtp.send_message(msg)
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logging.error("SMTP authentication failed. Check your Gmail credentials.")
-    except smtplib.SMTPConnectError:
-        logging.error("Unable to connect to Gmail SMTP server.")
-    except Exception as e:
-        logging.error(f"Unexpected error sending confirmation email: {e}")
-    return False
+    return send_email_with_retry(msg)
 
 
 def send_admin_notification(user_email, user_name, phone, message):
     """Send notification email to admin with the user's contact details."""
-    admin_email = os.environ.get('ADMIN_GMAIL')
-    admin_password = os.environ.get('ADMIN_GMAIL_PASSWORD')
-
-    if not admin_email or not admin_password:
-        logging.error("Admin Gmail credentials not set in environment variables.")
+    if not validate_email_config():
         return False
 
+    admin_email = os.environ.get('ADMIN_GMAIL')
     msg = EmailMessage()
     msg['Subject'] = 'New Contact Form Submission'
     msg['From'] = admin_email
@@ -85,24 +130,47 @@ def send_admin_notification(user_email, user_name, phone, message):
         f"Message: {message}\n"
     )
 
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(admin_email, admin_password)
-            smtp.send_message(msg)
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logging.error("SMTP authentication failed. Check your Gmail credentials.")
-    except smtplib.SMTPConnectError:
-        logging.error("Unable to connect to Gmail SMTP server.")
-    except Exception as e:
-        logging.error(f"Unexpected error sending admin notification: {e}")
-    return False
+    return send_email_with_retry(msg)
+
+
+# Add a test endpoint for email configuration
+@contact_bp.route('/contact/test-email', methods=['GET'])
+def test_email():
+    """Test email configuration."""
+    if not validate_email_config():
+        return jsonify({
+            'success': False,
+            'message': 'Email configuration incomplete. Check ADMIN_GMAIL and ADMIN_GMAIL_PASSWORD.'
+        }), 500
+
+    admin_email = os.environ.get('ADMIN_GMAIL')
+    msg = EmailMessage()
+    msg['Subject'] = 'Test Email'
+    msg['From'] = admin_email
+    msg['To'] = admin_email
+    msg.set_content('This is a test email to verify SMTP configuration.')
+
+    if send_email_with_retry(msg):
+        return jsonify({
+            'success': True,
+            'message': 'Test email sent successfully'
+        })
+    return jsonify({
+        'success': False,
+        'message': 'Failed to send test email. Check logs for details.'
+    }), 500
 
 
 @contact_bp.route('/contact', methods=['POST', 'OPTIONS'])
 def contact():
+    # Handle preflight requests
     if request.method == 'OPTIONS':
-        return '', 200
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.status_code = 200
+        return response
+
     try:
         data = request.get_json(force=True)
     except Exception as e:
