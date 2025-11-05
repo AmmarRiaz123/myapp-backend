@@ -18,6 +18,7 @@ from routes.admin.dashboard import admin_dashboard_bp
 from routes.admin.inventory_management import admin_inventory_bp
 from routes.admin.order_management import admin_orders_bp
 from routes.admin.product_management import admin_products_bp
+from routes.address_routes import address_bp
 
 # Load environment variables
 load_dotenv()
@@ -68,6 +69,7 @@ app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(cart_bp)
 app.register_blueprint(order_bp)
 app.register_blueprint(payfast_bp)
+app.register_blueprint(address_bp)
 app.register_blueprint(admin_dashboard_bp)
 app.register_blueprint(admin_inventory_bp)
 app.register_blueprint(admin_orders_bp)

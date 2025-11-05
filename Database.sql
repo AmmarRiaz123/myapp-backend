@@ -129,6 +129,42 @@ CREATE TABLE IF NOT EXISTS payment_notifications (
     received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Valid provinces lookup table
+CREATE TABLE IF NOT EXISTS provinces (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL
+);
+
+-- Insert common Pakistan provinces
+INSERT INTO provinces (name) VALUES 
+    ('Punjab'),
+    ('Sindh'),
+    ('Khyber Pakhtunkhwa'),
+    ('Balochistan'),
+    ('Islamabad Capital Territory'),
+    ('Gilgit-Baltistan'),
+    ('Azad Kashmir')
+ON CONFLICT (name) DO NOTHING;
+
+-- Shipping addresses
+CREATE TABLE IF NOT EXISTS shipping_addresses (
+    id SERIAL PRIMARY KEY,
+    province_id INT REFERENCES provinces(id),
+    city VARCHAR(100) NOT NULL,
+    street_address TEXT NOT NULL,
+    postal_code VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add address fields to orders
+ALTER TABLE orders 
+    ADD COLUMN IF NOT EXISTS shipping_address_id INT REFERENCES shipping_addresses(id),
+    ADD COLUMN IF NOT EXISTS billing_address_id INT REFERENCES shipping_addresses(id);
+
+-- Index for faster address lookups
+CREATE INDEX IF NOT EXISTS idx_orders_shipping_address ON orders(shipping_address_id);
+CREATE INDEX IF NOT EXISTS idx_orders_province ON shipping_addresses(province_id);
+
 -- View for admin dashboard
 DROP VIEW IF EXISTS admin_dashboard;
 CREATE VIEW admin_dashboard AS
@@ -139,9 +175,11 @@ SELECT
     COALESCE(SUM(oi.quantity * oi.price), 0) as total_revenue,
     (SELECT COUNT(*) FROM products) as total_products,
     (SELECT COUNT(*) FROM inventory WHERE quantity < 10) as low_stock_items,
-    COUNT(DISTINCT o.id) FILTER (WHERE o.payment_status = TRUE) as paid_orders
+    COUNT(DISTINCT o.id) FILTER (WHERE o.payment_status = TRUE) as paid_orders,
+    COUNT(DISTINCT sa.province_id) as provinces_served
 FROM orders o
 LEFT JOIN order_items oi ON o.id = oi.order_id
+LEFT JOIN shipping_addresses sa ON o.shipping_address_id = sa.id
 WHERE o.created_at >= NOW() - INTERVAL '30 days';
 
 
