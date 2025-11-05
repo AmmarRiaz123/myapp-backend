@@ -49,8 +49,9 @@ def load_payfast_config():
     else:
         url = os.getenv('PAYFAST_URL', live_url)
         
-    merchant_id = os.getenv('PAYFAST_MERCHANT_ID') or '10043315'
-    merchant_key = os.getenv('PAYFAST_MERCHANT_KEY') or 'u82ct2ml2kb80'
+    # Use environment variables, fall back to defaults only if not set
+    merchant_id = os.getenv('PAYFAST_MERCHANT_ID', '10043315')
+    merchant_key = os.getenv('PAYFAST_MERCHANT_KEY', 'u82ct2ml2kb80')
     passphrase = os.getenv('PAYFAST_PASSPHRASE', '')
 
     # Log non-sensitive config for debugging
@@ -60,9 +61,9 @@ def load_payfast_config():
         logging.info("Using PayFast LIVE environment for payments")
 
     return {
-        'merchant_id': '10043315',
-        'merchant_key': 'u82ct2ml2kb80',
-        'url': 'https://sandbox.payfast.co.za/eng/process',
+        'merchant_id': merchant_id,  # Changed: no longer hardcoded
+        'merchant_key': merchant_key,  # Changed: no longer hardcoded
+        'url': url,
         'passphrase': passphrase
     }
 
