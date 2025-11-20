@@ -21,7 +21,6 @@ def get_db_connection():
     return conn, cur
 
 @cart_bp.route('/cart/add', methods=['POST'])
-@require_auth
 def add_to_cart():
     data = request.get_json()
     product_id = data.get('product_id')
@@ -123,7 +122,6 @@ def update_cart_item():
 
 
 @cart_bp.route('/cart', methods=['GET'])
-@require_auth
 def get_cart():
     user_id = request.user['sub']
     conn, cur = get_db_connection()
