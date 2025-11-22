@@ -35,10 +35,14 @@ def add_to_cart():
     conn, cur = get_db_connection()
     if not conn or not cur:
         return jsonify({'success': False, 'message': 'Database connection failed'}), 500
+
     try:
+        print("🧠 DEBUG:", user_id, product_id, quantity)  # 👈 add this
         # Get or create cart
         cur.execute("SELECT id FROM cart WHERE user_id = %s", (user_id,))
         cart = cur.fetchone()
+        print("🛒 Existing cart:", cart)  # 👈 add this
+
         if not cart:
             cur.execute("INSERT INTO cart (user_id) VALUES (%s) RETURNING id", (user_id,))
             cart = cur.fetchone()
@@ -59,7 +63,61 @@ def add_to_cart():
                        (cart_id, product_id, quantity))
         
         conn.commit()
+        print("✅ Item added successfully")
         return jsonify({'success': True, 'message': 'Item added to cart'}), 201
+
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        traceback.print_exc()  # 👈 full error stack
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+@cart_bp.route('/cart/update', methods=['POST'])
+@require_auth
+def update_cart_item():
+    data = request.get_json()
+    product_id = data.get('product_id')
+    quantity = data.get('quantity')
+    user_id = request.user['sub']
+
+    if not product_id or quantity is None:
+        return jsonify({'success': False, 'message': 'Product ID and quantity are required'}), 400
+
+    if quantity < 0 or quantity % 10 != 0:
+        return jsonify({'success': False, 'message': 'Quantity must be in increments of 10 and cannot be negative'}), 400
+
+    conn, cur = get_db_connection()
+    if not conn or not cur:
+        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
+
+    try:
+        # Get user's cart
+        cur.execute("SELECT id FROM cart WHERE user_id = %s", (user_id,))
+        cart = cur.fetchone()
+        if not cart:
+            return jsonify({'success': False, 'message': 'Cart not found'}), 404
+
+        if quantity == 0:
+            # Delete the item if quantity is 0
+            cur.execute(
+                "DELETE FROM cart_items WHERE cart_id = %s AND product_id = %s",
+                (cart[0], product_id)
+            )
+        else:
+            # Update quantity
+            cur.execute(
+                "UPDATE cart_items SET quantity = %s WHERE cart_id = %s AND product_id = %s",
+                (quantity, cart[0], product_id)
+            )
+
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Cart updated'}), 200
+
     except Exception as e:
         conn.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -68,6 +126,8 @@ def add_to_cart():
             cur.close()
         if conn:
             conn.close()
+
+
 
 @cart_bp.route('/cart', methods=['GET'])
 def get_cart():
@@ -80,8 +140,14 @@ def get_cart():
     if not conn or not cur:
         return jsonify({'success': False, 'message': 'Database connection failed'}), 500
     try:
+        # Fetch cart items with product info
         cur.execute("""
-            SELECT ci.id, p.name, p.product_code, ci.quantity, p.id as product_id
+            SELECT ci.id AS cart_item_id,
+                   p.id AS product_id,
+                   p.name AS product_name,
+                   p.product_code,
+                   ci.quantity,
+                   p.price
             FROM cart c
             JOIN cart_items ci ON c.id = ci.cart_id
             JOIN products p ON ci.product_id = p.id
@@ -106,3 +172,7 @@ def get_cart():
             cur.close()
         if conn:
             conn.close()
+
+
+
+# All routes already protected with @require_auth
