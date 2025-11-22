@@ -97,6 +97,11 @@ CREATE TABLE cart_items (
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add unique constraint to cart_items to prevent duplicate product entries per cart
+ALTER TABLE cart_items 
+    ADD CONSTRAINT IF NOT EXISTS unique_cart_product 
+    UNIQUE (cart_id, product_id);
+
 -- Index for faster cart lookups
 CREATE INDEX idx_cart_user_id ON cart(user_id);
 
