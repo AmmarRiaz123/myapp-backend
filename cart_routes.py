@@ -78,7 +78,6 @@ def add_to_cart():
             conn.close()
 
 @cart_bp.route('/cart/update', methods=['POST'])
-@require_auth
 def update_cart_item():
     data = request.get_json()
     product_id = data.get('product_id')
