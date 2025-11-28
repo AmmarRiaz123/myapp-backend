@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 import os
 import psycopg2
 from dotenv import load_dotenv
+import uuid
 
 load_dotenv()
 
@@ -19,29 +20,58 @@ def get_db_connection():
     cur = conn.cursor()
     return conn, cur
 
+def get_user_identifier_for_cart(request):
+    """Get user identifier for cart operations."""
+    # First check if user_id provided in request (backwards compatibility)
+    data = request.get_json(silent=True) if request.method == 'POST' else None
+    query_user_id = request.args.get('user_id') if request.method == 'GET' else None
+    
+    if data and data.get('user_id'):
+        return data['user_id']
+    elif query_user_id:
+        return query_user_id
+    
+    # Check for authenticated user
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        try:
+            from auth.token_validator import verify_token, extract_token
+            token = extract_token()
+            if token:
+                user_data = verify_token(token)
+                return user_data['sub']
+        except:
+            pass
+    
+    # Guest user - use session (ensure app has secret_key)
+    try:
+        if 'guest_id' not in session:
+            session['guest_id'] = str(uuid.uuid4())
+        return session['guest_id']
+    except RuntimeError:
+        # Fallback if session not available (like in tests without secret key)
+        return f"guest_{uuid.uuid4().hex[:8]}"
+
 @cart_bp.route('/cart/add', methods=['POST'])
 def add_to_cart():
     data = request.get_json()
     product_id = data.get('product_id')
     quantity = data.get('quantity', 1)
-    user_id = data.get('user_id')  # Now comes from request body instead of auth
+    
+    # Get user identifier (auth user, provided user_id, or session-based guest)
+    user_id = get_user_identifier_for_cart(request)
 
     if not product_id:
         return jsonify({'success': False, 'message': 'Product ID is required'}), 400
-    
-    if not user_id:
-        return jsonify({'success': False, 'message': 'User ID is required'}), 400
 
     conn, cur = get_db_connection()
     if not conn or not cur:
         return jsonify({'success': False, 'message': 'Database connection failed'}), 500
 
     try:
-        print("🧠 DEBUG:", user_id, product_id, quantity)  # 👈 add this
         # Get or create cart
         cur.execute("SELECT id FROM cart WHERE user_id = %s", (user_id,))
         cart = cur.fetchone()
-        print("🛒 Existing cart:", cart)  # 👈 add this
 
         if not cart:
             cur.execute("INSERT INTO cart (user_id) VALUES (%s) RETURNING id", (user_id,))
@@ -63,13 +93,15 @@ def add_to_cart():
                        (cart_id, product_id, quantity))
         
         conn.commit()
-        print("✅ Item added successfully")
-        return jsonify({'success': True, 'message': 'Item added to cart'}), 201
+        return jsonify({
+            'success': True, 
+            'message': 'Item added to cart',
+            'user_id': user_id,  # Return for frontend to store
+            'user_type': 'guest' if not request.headers.get('Authorization') else 'authenticated'
+        }), 201
 
     except Exception as e:
         conn.rollback()
-        import traceback
-        traceback.print_exc()  # 👈 full error stack
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         if cur:
@@ -126,27 +158,22 @@ def update_cart_item():
         if conn:
             conn.close()
 
-
-
 @cart_bp.route('/cart', methods=['GET'])
 def get_cart():
-    user_id = request.args.get('user_id')  # Get from query params instead of auth
-    
-    if not user_id:
-        return jsonify({'success': False, 'message': 'User ID is required'}), 400
+    user_id = get_user_identifier_for_cart(request)
     
     conn, cur = get_db_connection()
     if not conn or not cur:
         return jsonify({'success': False, 'message': 'Database connection failed'}), 500
     try:
-        # Fetch cart items with product info
+        # Fetch cart items with product info - ensure column order matches usage
         cur.execute("""
             SELECT ci.id AS cart_item_id,
                    p.id AS product_id,
                    p.name AS product_name,
                    p.product_code,
                    ci.quantity,
-                   p.price
+                   COALESCE(p.price, 0) AS price
             FROM cart c
             JOIN cart_items ci ON c.id = ci.cart_id
             JOIN products p ON ci.product_id = p.id
@@ -154,15 +181,16 @@ def get_cart():
         """, (user_id,))
         items = cur.fetchall()
         
-        # Format response properly
+        # Format response properly - match column order
         formatted_items = []
         for item in items:
             formatted_items.append({
-                'id': item[0],
-                'name': item[1],
-                'product_code': item[2],
-                'quantity': item[3],
-                'product_id': item[4]
+                'cart_item_id': item[0],    # ci.id
+                'product_id': item[1],      # p.id  
+                'product_name': item[2],    # p.name
+                'product_code': item[3],    # p.product_code
+                'quantity': item[4],        # ci.quantity
+                'price': float(item[5]) if item[5] is not None else 0.0  # p.price
             })
         
         return jsonify({'success': True, 'items': formatted_items})
@@ -173,5 +201,3 @@ def get_cart():
             conn.close()
 
 
-
-# All routes already protected with @require_auth
