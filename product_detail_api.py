@@ -67,6 +67,25 @@ def get_product_detail(product_id):
         cursor.execute("SELECT quantity FROM inventory WHERE product_id = %s", (product_id,))
         inventory = cursor.fetchone()
 
+        # Get reviews (latest 10)
+        cursor.execute("""
+            SELECT rating, review, reviewer_name, created_at
+            FROM product_reviews
+            WHERE product_id = %s
+            ORDER BY created_at DESC
+            LIMIT 10;
+            """, (product_id,))
+        reviews = cursor.fetchall()
+
+        # Get average rating
+        cursor.execute("""
+            SELECT ROUND(AVG(rating), 2) AS avg_rating, COUNT(*) AS total_reviews
+            FROM product_reviews
+            WHERE product_id = %s;
+            """, (product_id,))
+        rating_stats = cursor.fetchone()
+
+
         cursor.close()
         conn.close()
 
@@ -75,7 +94,10 @@ def get_product_detail(product_id):
             'product': product,
             'type_details': type_details,
             'images': images,
-            'inventory': inventory['quantity'] if inventory else 0
+            'inventory': inventory['quantity'] if inventory else 0,
+            'reviews': reviews,
+            'average_rating': rating_stats['avg_rating'] if rating_stats['avg_rating'] else 0,
+            'total_reviews': rating_stats['total_reviews']
         }
         return jsonify(response)
     except Exception as e:
