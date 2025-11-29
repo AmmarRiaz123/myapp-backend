@@ -26,7 +26,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Updated CORS configuration with proper preflight handling
 CORS(
     app,
     resources={
@@ -39,12 +38,20 @@ CORS(
                 "https://www.pekypk.com"
             ],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-            "expose_headers": ["Content-Type", "Authorization"],
+            "allow_headers": [
+                "Content-Type",
+                "Authorization",
+                "X-Guest-ID",
+                "X-Requested-With",
+                "Accept"
+            ],
+            "expose_headers": [
+                "Content-Type",
+                "Authorization",
+                "X-Guest-ID"
+            ],
             "supports_credentials": True,
-            "max_age": 600,
-            "vary_header": True,
-            "send_wildcard": False
+            "max_age": 600
         }
     }
 )

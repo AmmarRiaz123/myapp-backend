@@ -21,17 +21,9 @@ def get_db_connection():
     return conn, cur
 
 def get_user_identifier_for_cart(request):
-    """Get user identifier for cart operations."""
-    # First check if user_id provided in request (backwards compatibility)
-    data = request.get_json(silent=True) if request.method == 'POST' else None
-    query_user_id = request.args.get('user_id') if request.method == 'GET' else None
-    
-    if data and data.get('user_id'):
-        return data['user_id']
-    elif query_user_id:
-        return query_user_id
-    
-    # Check for authenticated user
+    """Get user identifier for cart operations (logged-in or guest)."""
+
+    # 1️⃣ Check if authenticated user (Authorization: Bearer ...)
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
         try:
@@ -39,18 +31,19 @@ def get_user_identifier_for_cart(request):
             token = extract_token()
             if token:
                 user_data = verify_token(token)
-                return user_data['sub']
+                return str(user_data['sub'])
         except:
             pass
-    
-    # Guest user - use session (ensure app has secret_key)
-    try:
-        if 'guest_id' not in session:
-            session['guest_id'] = str(uuid.uuid4())
-        return session['guest_id']
-    except RuntimeError:
-        # Fallback if session not available (like in tests without secret key)
-        return f"guest_{uuid.uuid4().hex[:8]}"
+
+    # 2️⃣ Check if frontend sent guest ID
+    guest_id = request.headers.get("X-Guest-ID")
+    if guest_id:
+        return str(guest_id)
+
+    # 3️⃣ Fallback (should rarely happen)
+    new_guest = f"guest_{uuid.uuid4().hex[:8]}"
+    return new_guest
+
 
 @cart_bp.route('/cart/add', methods=['POST'])
 def add_to_cart():
