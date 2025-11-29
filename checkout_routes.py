@@ -27,18 +27,17 @@ def get_db_connection(cursor_factory=None):
 def get_user_identifier(request):
     """Get user identifier - either auth user_id or session_id for guests."""
     # Check if user is authenticated
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
+    auth_header = request.headers.get('Authorization', '') or ''
+    if auth_header.lower().startswith('bearer '):
         try:
-            # This will set request.user if token is valid
-            from auth.token_validator import verify_token, extract_token
-            token = extract_token()
-            if token:
+            token = auth_header.split(' ', 1)[1].strip()
+            if token and token.lower() not in ('null', 'undefined', ''):
+                from auth.token_validator import verify_token
                 user_data = verify_token(token)
                 return {'type': 'authenticated', 'id': user_data['sub'], 'user_data': user_data}
-        except:
+        except Exception:
             pass
-    
+
     # Guest user - use session or create new session
     if 'guest_id' not in session:
         session['guest_id'] = str(uuid.uuid4())
@@ -98,130 +97,101 @@ def merge_guest_cart():
         cur.close()
         conn.close()
 
-@checkout_bp.route('/checkout/initiate', methods=['POST'])
-def initiate_checkout():
-    """Start checkout process - works for both guest and authenticated users."""
+@checkout_bp.route('/checkout', methods=['POST'])
+def checkout():
+    """Unified checkout route: guest + authenticated users."""
     user_info = get_user_identifier(request)
     data = request.get_json()
-    
-    # Early validation of shipping address before DB operations
-    shipping_data = data.get('shipping_address')
-    if not shipping_data:
-        return jsonify({
-            'success': False, 
-            'message': 'Complete shipping address required'
-        }), 400
-    
-    required_shipping_fields = ['province_id', 'city', 'street_address']
-    if not all(shipping_data.get(field) for field in required_shipping_fields):
-        return jsonify({
-            'success': False, 
-            'message': 'Complete shipping address required'
-        }), 400
-    
+
     conn, cur = get_db_connection(cursor_factory=RealDictCursor)
-    
+
     try:
-        # Get cart items
+        # Get cart
         cur.execute("""
-            SELECT ci.product_id, ci.quantity, p.name, p.price
+            SELECT ci.product_id, ci.quantity, p.price
             FROM cart c
             JOIN cart_items ci ON c.id = ci.cart_id
             JOIN products p ON ci.product_id = p.id
             WHERE c.user_id = %s
         """, (user_info['id'],))
-        
         cart_items = cur.fetchall()
-        
+
         if not cart_items:
             return jsonify({'success': False, 'message': 'Cart is empty'}), 400
-        
-        # Calculate total
-        total = sum(float(item['price']) * item['quantity'] for item in cart_items)
-        
-        # Create customer record for guest or get existing for authenticated
-        if user_info['type'] == 'guest':
-            customer_data = data.get('customer_info', {})
-            required_fields = ['name', 'email', 'phone']
-            
-            if not all(customer_data.get(field) for field in required_fields):
-                return jsonify({
-                    'success': False, 
-                    'message': 'Customer information required for guest checkout'
-                }), 400
-            
+
+        # Total price
+        total = sum(float(i['price']) * i['quantity'] for i in cart_items)
+
+        # Create customer (only for guests)
+        if user_info["type"] == "guest":
+            cust = data.get("customer_info", {})
+            if not all(cust.get(f) for f in ("name", "email", "phone")):
+                return jsonify({"success": False, "message": "Guest customer info missing"}), 400
+
             cur.execute("""
-                INSERT INTO customers (name, email, phone, message)
-                VALUES (%s, %s, %s, %s) RETURNING id
-            """, (
-                customer_data['name'],
-                customer_data['email'], 
-                customer_data['phone'],
-                f"Guest checkout - {datetime.now()}"
-            ))
+                INSERT INTO customers (name, email, phone)
+                VALUES (%s, %s, %s) RETURNING id
+            """, (cust["name"], cust["email"], cust["phone"]))
             customer_id = cur.fetchone()['id']
-            
         else:
-            # For authenticated users, create or get customer record
-            user_data = user_info['user_data']
+            # authenticated → use email to find or create
+            ud = user_info["user_data"]
             cur.execute("""
-                INSERT INTO customers (name, email, phone, message)
-                VALUES (%s, %s, %s, %s) 
-                ON CONFLICT (email) DO UPDATE SET 
-                    name = EXCLUDED.name,
-                    phone = EXCLUDED.phone
+                INSERT INTO customers (name, email, phone)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
-            """, (
-                user_data.get('name', ''),
-                user_data.get('email', ''),
-                user_data.get('phone_number', ''),
-                f"Authenticated checkout - {datetime.now()}"
-            ))
-            customer_id = cur.fetchone()['id']
-        
-        # Create shipping address (validation already done above)
+            """, (ud.get("name", ""), ud["email"], ud.get("phone_number", "")))
+            customer_id = cur.fetchone()["id"]
+
+        # Shipping address
+        ship = data.get("shipping_address", {})
         cur.execute("""
             INSERT INTO shipping_addresses (province_id, city, street_address, postal_code)
             VALUES (%s, %s, %s, %s) RETURNING id
         """, (
-            shipping_data['province_id'],
-            shipping_data['city'],
-            shipping_data['street_address'],
-            shipping_data.get('postal_code', '')
+            ship["province_id"],
+            ship["city"],
+            ship["street_address"],
+            ship.get("postal_code", "")
         ))
-        shipping_address_id = cur.fetchone()['id']
-        
-        # Create order
+        shipping_id = cur.fetchone()['id']
+
+        # Order
         cur.execute("""
-            INSERT INTO orders (customer_id, status, total_price, shipping_address_id, payment_status)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id
-        """, (customer_id, 'pending', total, shipping_address_id, False))
-        
+            INSERT INTO orders (customer_id, status, total_price, shipping_address_id)
+            VALUES (%s, 'pending', %s, %s)
+            RETURNING id
+        """, (customer_id, total, shipping_id))
         order_id = cur.fetchone()['id']
-        
-        # Create order items
+
+        # Order items
         for item in cart_items:
             cur.execute("""
                 INSERT INTO order_items (order_id, product_id, quantity, price)
                 VALUES (%s, %s, %s, %s)
             """, (order_id, item['product_id'], item['quantity'], item['price']))
-        
+
+        # Clear cart
+        cur.execute("DELETE FROM cart WHERE user_id = %s", (user_info['id'],))
+
         conn.commit()
-        
+
         return jsonify({
-            'success': True,
-            'order_id': order_id,
-            'total': float(total),
-            'customer_type': user_info['type'],
-            'message': 'Order created successfully'
-        })
-        
+            "success": True,
+            "order_id": order_id,
+            "total": float(total),
+            "customer_type": user_info["type"]
+        }), 200
+
     except Exception as e:
         conn.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
+
     finally:
         cur.close()
         conn.close()
+
 
 @checkout_bp.route('/checkout/complete', methods=['POST'])
 def complete_checkout():

@@ -41,7 +41,13 @@ def get_provinces():
 def create_shipping_address():
     """Create shipping address and return ID for order creation."""
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid or missing JSON body. Ensure Content-Type: application/json and a valid JSON payload.'
+            }), 400
+
         required = ['province_id', 'city', 'street_address']
         if not all(data.get(field) for field in required):
             return jsonify({
