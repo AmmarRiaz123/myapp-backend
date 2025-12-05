@@ -116,8 +116,8 @@ def test_create_shipping_address_missing_fields(client):
 
 def test_create_shipping_address_invalid_json(client):
     response = client.post('/shipping-address', data='invalid json')
-    
+
     assert response.status_code == 400
     data = json.loads(response.data)
     assert data['success'] is False
-    assert 'Invalid request' in data['message']
+    assert 'Invalid or missing JSON body' in data['message']
