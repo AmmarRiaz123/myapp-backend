@@ -187,10 +187,6 @@ LEFT JOIN order_items oi ON o.id = oi.order_id
 LEFT JOIN shipping_addresses sa ON o.shipping_address_id = sa.id
 WHERE o.created_at >= NOW() - INTERVAL '30 days';
 
--- Add unique constraint for customer emails (for authenticated users)
-ALTER TABLE customers 
-    ADD CONSTRAINT IF NOT EXISTS unique_customer_email 
-    UNIQUE (email);
 
 
 

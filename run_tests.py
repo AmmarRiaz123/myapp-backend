@@ -19,7 +19,7 @@ def run_tests():
         'tests/test_address_routes.py',
         'tests/test_cart_routes.py', 
         'tests/test_contact_routes.py',
-        'tests/test_checkout_routes.py',  # Add new checkout tests
+        'tests/test_checkout_routes.py',
         'payfastpk/test_payfast_api.py'
     ]
     
