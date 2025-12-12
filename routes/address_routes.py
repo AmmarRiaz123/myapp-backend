@@ -62,23 +62,46 @@ def send_email_with_retry(to_email, subject, html_content, max_retries=3):
     return False
 
 def send_admin_cod_notification(order):
+    """Send COD order to admin with accurate product names and prices from DB."""
     admin_email = os.getenv("ADMIN_EMAIL", "admin@pekypk.com")
-
-    # Build product table (if any)
     cart_items = order.get("cart_items", [])
-    if cart_items:
+
+    if not cart_items:
+        items_html = "<tr><td colspan='3'>No cart items</td></tr>"
+        total_price = order.get("price", 0)
+    else:
+        # Fetch product details from DB
+        conn, cur = get_db_connection()
+        total_price = 0
+        for item in cart_items:
+            product_id = item.get("product_id")
+            cur.execute("SELECT name, price FROM products WHERE id = %s", (product_id,))
+            result = cur.fetchone()
+            if result:
+                name, price = result
+                item["name"] = name
+                item["price"] = price
+                item["line_total"] = price * item.get("quantity", 1)
+                total_price += item["line_total"]
+            else:
+                item["name"] = f"Product #{product_id}"
+                item["price"] = item.get("price", 0)
+                item["line_total"] = item["price"] * item.get("quantity", 1)
+                total_price += item["line_total"]
+        cur.close()
+        conn.close()
+
+        # Build HTML table rows
         items_html = "".join(
             f"""
             <tr style='border-bottom:1px solid #ddd'>
                 <td>{item.get('name')}</td>
                 <td>{item.get('quantity')}</td>
-                <td>Rs {item.get('price')}</td>
+                <td>Rs {item.get('line_total')}</td>
             </tr>
             """
             for item in cart_items
         )
-    else:
-        items_html = "<tr><td colspan='3'>No cart items sent</td></tr>"
 
     html = f"""
         <h2>New Cash on Delivery Order</h2>
@@ -99,7 +122,7 @@ def send_admin_cod_notification(order):
         </p>
 
         <h3>Order Summary</h3>
-        <p><strong>Total Price:</strong> Rs {order.get('price')}</p>
+        <p><strong>Total Price:</strong> Rs {total_price}</p>
 
         <h3>Cart Items</h3>
         <table style="width:100%; border-collapse:collapse">
@@ -121,6 +144,7 @@ def send_admin_cod_notification(order):
         subject="New Cash on Delivery Order",
         html_content=html
     )
+
 
 
 # ------------------------- EXISTING ROUTES -------------------------
