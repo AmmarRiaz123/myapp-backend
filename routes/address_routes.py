@@ -61,33 +61,67 @@ def send_email_with_retry(to_email, subject, html_content, max_retries=3):
 
     return False
 
-def send_admin_cod_notification(data):
-    """Send Cash on Delivery details to admin."""
-    admin_email = os.getenv('ADMIN_EMAIL', 'admin@pekypk.com')
-    if not validate_email_config():
-        return False
+def send_admin_cod_notification(order):
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@pekypk.com")
+
+    # Build product table (if any)
+    cart_items = order.get("cart_items", [])
+    if cart_items:
+        items_html = "".join(
+            f"""
+            <tr style='border-bottom:1px solid #ddd'>
+                <td>{item.get('name')}</td>
+                <td>{item.get('quantity')}</td>
+                <td>Rs {item.get('price')}</td>
+            </tr>
+            """
+            for item in cart_items
+        )
+    else:
+        items_html = "<tr><td colspan='3'>No cart items sent</td></tr>"
 
     html = f"""
-    <h2>New Cash on Delivery Order</h2>
+        <h2>New Cash on Delivery Order</h2>
 
-    <h3>Customer Details</h3>
-    <p><strong>Name:</strong> {data['full_name']}</p>
-    <p><strong>Email:</strong> {data['email']}</p>
-    <p><strong>Phone:</strong> {data['phone']}</p>
-    <p><strong>Price:</strong> PKR {data['price']}</p>
+        <h3>Customer Info</h3>
+        <p>
+            <strong>Name:</strong> {order.get('full_name')}<br>
+            <strong>Email:</strong> {order.get('email')}<br>
+            <strong>Phone:</strong> {order.get('phone')}<br>
+        </p>
 
-    <h3>Shipping Address</h3>
-    <p><strong>Province ID:</strong> {data['province_id']}</p>
-    <p><strong>City:</strong> {data['city']}</p>
-    <p><strong>Street Address:</strong> {data['street_address']}</p>
-    <p><strong>Postal Code:</strong> {data.get('postal_code', 'N/A')}</p>
+        <h3>Address</h3>
+        <p>
+            <strong>Province ID:</strong> {order.get('province_id')}<br>
+            <strong>City:</strong> {order.get('city')}<br>
+            <strong>Street:</strong> {order.get('street_address')}<br>
+            <strong>Postal:</strong> {order.get('postal_code') or 'N/A'}<br>
+        </p>
+
+        <h3>Order Summary</h3>
+        <p><strong>Total Price:</strong> Rs {order.get('price')}</p>
+
+        <h3>Cart Items</h3>
+        <table style="width:100%; border-collapse:collapse">
+            <thead>
+                <tr style="background:#f0f0f0">
+                    <th style="text-align:left">Product</th>
+                    <th style="text-align:left">Qty</th>
+                    <th style="text-align:left">Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_html}
+            </tbody>
+        </table>
     """
 
     return send_email_with_retry(
-        admin_email,
-        "New Cash on Delivery Order",
-        html
+        to_email=admin_email,
+        subject="New Cash on Delivery Order",
+        html_content=html
     )
+
 
 # ------------------------- EXISTING ROUTES -------------------------
 
@@ -157,7 +191,6 @@ def create_shipping_address():
 
 @address_bp.route('/cash-on-delivery', methods=['POST'])
 def cash_on_delivery():
-    """Accept COD order details and send them to admin Gmail."""
     try:
         data = request.get_json(silent=True)
 
@@ -172,6 +205,12 @@ def cash_on_delivery():
         if not all(data.get(field) for field in required):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
+        # cart_items optional but recommended
+        cart_items = data.get("cart_items", [])
+
+        if not isinstance(cart_items, list):
+            return jsonify({'success': False, 'message': 'Invalid cart_items'}), 400
+
         # Send email to admin
         admin_notified = send_admin_cod_notification(data)
 
@@ -180,11 +219,12 @@ def cash_on_delivery():
                 'success': True,
                 'message': 'Cash on Delivery order received. Admin has been notified.'
             }), 201
-        else:
-            return jsonify({
-                'success': True,
-                'message': 'Order received but failed to notify admin.'
-            }), 201
+
+        return jsonify({
+            'success': True,
+            'message': 'Order received but failed to notify admin.'
+        }), 201
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 400
+
